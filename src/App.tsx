@@ -403,12 +403,43 @@ function Feed({ user, onViewProfile }: { user: User; onViewProfile?: (userId: st
                   )}
                 </div>
                 {post.media && post.media.length > 0 && (
-                  <img src={post.media[0]} className="w-full max-h-96 object-cover" alt="" />
+                  <div className="relative group cursor-pointer" onClick={() => window.open(post.media![0], '_blank')}>
+                    <img 
+                      src={post.media[0]} 
+                      className="w-full max-h-96 object-cover transition-transform group-hover:scale-105" 
+                      alt=""
+                      style={{ borderRadius: '12px' }}
+                    />
+                    {post.media[0].endsWith('.gif') && (
+                      <div className="absolute top-3 right-3 px-2 py-1 rounded-lg text-xs font-bold" style={{ background: 'rgba(0,0,0,0.7)', color: 'white', backdropFilter: 'blur(10px)' }}>
+                        GIF
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center rounded-xl">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center glow-purple">
+                          <Eye size={24} color="white" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
                 <div className="p-4 flex items-center gap-4 border-t" style={{ borderColor: 'var(--border)' }}>
-                  <button className="flex items-center gap-1.5" onClick={() => likePost(post.id)}>
-                    <Heart size={20} fill={liked ? '#ef4444' : 'none'} style={{ color: liked ? '#ef4444' : 'var(--text-secondary)' }} />
-                    <span className="text-sm">{post.likes_count || 0}</span>
+                  <button 
+                    className="flex items-center gap-1.5 transition-all hover:scale-110" 
+                    onClick={() => likePost(post.id)}
+                    style={{ transform: liked ? 'scale(1.1)' : 'scale(1)' }}
+                  >
+                    <Heart 
+                      size={22} 
+                      fill={liked ? '#ef4444' : 'none'} 
+                      style={{ 
+                        color: liked ? '#ef4444' : 'var(--text-secondary)',
+                        filter: liked ? 'drop-shadow(0 0 8px rgba(239, 68, 68, 0.5))' : 'none',
+                        transition: 'all 0.3s'
+                      }} 
+                    />
+                    <span className="text-sm font-semibold">{post.likes_count || 0}</span>
                   </button>
                   <button className="flex items-center gap-1.5">
                     <MessageCircle size={20} style={{ color: 'var(--text-secondary)' }} />
@@ -437,7 +468,21 @@ function Messenger({ user }: { user: User }) {
   const [newMessage, setNewMessage] = useState('');
   const [showNewChat, setShowNewChat] = useState(false);
   const [chatTitle, setChatTitle] = useState('');
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [fullscreenGif, setFullscreenGif] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Популярные GIF из Giphy API (бесплатные)
+  const popularGifs = [
+    'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif',
+    'https://media.giphy.com/media/3o7bu3YcmJHnHjMEve/giphy.gif',
+    'https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif',
+    'https://media.giphy.com/media/26BRv0ThSQs8MqYlq/giphy.gif',
+    'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif',
+    'https://media.giphy.com/media/3o7bu62hWHV3z2pRja/giphy.gif',
+    'https://media.giphy.com/media/26BRU0lm2BktpnpC8/giphy.gif',
+    'https://media.giphy.com/media/3o7bu4E9ELK3p1uVGM/giphy.gif',
+  ];
 
   const loadChats = async () => {
     try {
@@ -552,7 +597,18 @@ function Messenger({ user }: { user: User }) {
                 <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                   <div className="group relative">
                     <div className={`message-bubble ${isMine ? 'message-sent' : 'message-received'}`}>
-                      <p className="text-sm">{msg.content}</p>
+                      {/* Проверяем, является ли сообщение GIF */}
+                      {msg.content.match(/\.(gif|jpg|jpeg|png|webp)$/i) ? (
+                        <img
+                          src={msg.content}
+                          className="max-w-full rounded-lg cursor-pointer hover:scale-105 transition-transform"
+                          style={{ maxHeight: '300px' }}
+                          onClick={() => setFullscreenGif(msg.content)}
+                          alt="GIF"
+                        />
+                      ) : (
+                        <p className="text-sm">{msg.content}</p>
+                      )}
                       <div className="flex items-center justify-end gap-1 mt-1">
                         <span className="text-[10px] opacity-60">
                           {new Date(msg.created_at).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
@@ -587,17 +643,52 @@ function Messenger({ user }: { user: User }) {
             })}
             <div ref={messagesEndRef} />
           </div>
-          <div className="p-4 border-t flex items-center gap-3" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
-            <input
-              className="input-field flex-1"
-              placeholder="Сообщение..."
-              value={newMessage}
-              onChange={e => setNewMessage(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && sendMessage()}
-            />
-            <button className="w-10 h-10 rounded-full gradient-bg flex items-center justify-center" onClick={sendMessage}>
-              <Send size={18} color="white" />
-            </button>
+          <div className="p-4 border-t" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
+            {/* GIF Picker */}
+            {showGifPicker && (
+              <div className="mb-3 p-3 rounded-xl scale-in" style={{ background: 'var(--bg-tertiary)' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-sm">Выберите GIF</span>
+                  <button onClick={() => setShowGifPicker(false)} className="p-1 rounded-lg hover:bg-[var(--bg-hover)]">
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                  {popularGifs.map((gif, i) => (
+                    <img
+                      key={i}
+                      src={gif}
+                      className="w-full aspect-square object-cover rounded-lg cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => {
+                        setNewMessage(gif);
+                        setShowGifPicker(false);
+                      }}
+                      alt={`GIF ${i}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex items-center gap-3">
+              <button 
+                className="p-2 rounded-full hover:bg-[var(--bg-hover)] transition-all"
+                onClick={() => setShowGifPicker(!showGifPicker)}
+                title="GIF"
+              >
+                <Image size={20} style={{ color: 'var(--accent)' }} />
+              </button>
+              <input
+                className="input-field flex-1"
+                placeholder="Сообщение или вставьте URL GIF..."
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && sendMessage()}
+              />
+              <button className="w-10 h-10 rounded-full gradient-bg flex items-center justify-center hover:scale-110 transition-transform" onClick={sendMessage}>
+                <Send size={18} color="white" />
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -607,6 +698,30 @@ function Messenger({ user }: { user: User }) {
             <h3 className="text-xl font-bold mb-2">Выберите чат</h3>
             <p style={{ color: 'var(--text-muted)' }}>Или создайте новый</p>
           </div>
+        </div>
+      )}
+
+      {/* Полноэкранный GIF */}
+      {fullscreenGif && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center scale-in"
+          style={{ background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(10px)' }}
+          onClick={() => setFullscreenGif(null)}
+        >
+          <button 
+            className="absolute top-6 right-6 w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 transition-transform"
+            style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)' }}
+            onClick={() => setFullscreenGif(null)}
+          >
+            <X size={24} color="white" />
+          </button>
+          <img
+            src={fullscreenGif}
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-2xl"
+            style={{ boxShadow: '0 0 60px rgba(124, 58, 237, 0.5)' }}
+            alt="GIF"
+            onClick={e => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
