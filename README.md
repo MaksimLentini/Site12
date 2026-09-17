@@ -1,47 +1,54 @@
-# 🚀 MegaChat — Полноценный мессенджер с реальной базой данных
+# 🚀 MegaChat — Мессенджер нового поколения
 
-## ⚡ БЫСТРЫЙ СТАРТ (3 минуты)
+Полнофункциональный мессенджер с реальной базой данных SQLite.
 
-### 1. Установи Node.js
-Скачай с https://nodejs.org (версия 18 или выше)
+## ⚡ БЫСТРЫЙ СТАРТ (Windows)
 
-### 2. Открой терминал в папке проекта
-```bash
-cd путь/к/папке/megachat
+### Способ 1: Одним кликом
+```
+Дважды кликните на start.bat
 ```
 
-### 3. Установи зависимости фронтенда
-```bash
+### Способ 2: Вручную
+```cmd
+# 1. Установить зависимости фронтенда
 npm install
-```
 
-### 4. Установи зависимости сервера
-```bash
+# 2. Собрать фронтенд
+npm run build
+
+# 3. Установить зависимости сервера
 cd server
 npm install
-```
 
-### 5. Запусти сервер
-```bash
+# 4. Запустить сервер
 npm start
 ```
-Сервер запустится на `http://localhost:3001`  
-База данных создастся автоматически: `server/data/messenger.db`
 
-### 6. В ДРУГОМ терминале запусти фронтенд
-```bash
-cd ..
-npm run dev
+### 5. Открыть в браузере
 ```
-Фронтенд запустится на `http://localhost:5173`
-
-### 7. Открой в браузере
-```
-http://localhost:5173
+http://localhost:3001
 ```
 
-### 8. Зарегистрируйся
-**Первый зарегистрированный пользователь автоматически получает роль superadmin!**
+### 6. Зарегистрироваться
+Первый пользователь автоматически получает роль **superadmin**!
+
+---
+
+## 🌐 ХОСТИНГ В ИНТЕРНЕТЕ
+
+### LocalTunnel (проще всего)
+В **новой консоли**:
+```cmd
+npx localtunnel --port 3001
+```
+
+Получите публичную ссылку типа `https://xxx.loca.lt`
+
+### Pinggy
+```cmd
+ssh -p 443 -R0:localhost:3001 pinggy@a.pinggy.io
+```
 
 ---
 
@@ -49,82 +56,74 @@ http://localhost:5173
 
 ### ✅ Мессенджер (Telegram-стиль)
 - Личные чаты, группы, каналы
-- Отправка сообщений в реальном времени
-- Реакции на сообщения
+- Отправка сообщений
+- Реакции (❤️ и др.)
 - Статусы прочитано/доставлено
-- Индикатор "печатает..."
 
 ### ✅ Лента (Instagram-стиль)
 - Создание постов с хэштегами
 - Лайки, комментарии
 - Фото/видео в постах
-- Stories (24 часа)
 
 ### ✅ Видео (YouTube-стиль)
 - Загрузка видео
 - Просмотр с плеером
 - Лайки, счётчик просмотров
-- Теги и описание
 
 ### ✅ Shorts (TikTok-стиль)
-- Вертикальная лента коротких видео
+- Вертикальная лента
 - Свайп вверх/вниз
-- Лайки, комментарии
 
 ### ✅ Музыка (VK-стиль)
 - Загрузка треков
-- Плейлисты
 - Плеер с контролами
-- Обложки альбомов
+
+### ✅ Сторис
+- Создание сторис (24 часа)
+- Просмотр
 
 ### ✅ Профиль
-- Аватар, био, статус
-- Статистика (подписчики, подписки, посты)
-- Посты пользователя
+- Кастомизация (аватар, обложка, био, статус)
+- Статистика
+- Мои посты
 
 ### ✅ Админ-панель
-- **Дашборд** — статистика в реальном времени
-- **Пользователи** — бан/разбан, удаление, смена ролей
-- **Жалобы** — модерация контента
-- **Безопасность** — просмотр логов безопасности
-- **Audit Log** — все действия админов
+- Дашборд со статистикой
+- Управление пользователями (бан/разбан/удаление)
+- Модерация жалоб
+- Audit log
 
 ---
 
 ## 🗄️ БАЗА ДАННЫХ
 
-**Тип:** SQLite (better-sqlite3)  
+**Тип:** SQLite (sql.js — WebAssembly)  
 **Файл:** `server/data/messenger.db`  
-**Режим:** WAL (Write-Ahead Logging) для параллельных чтений
+**Режим:** WAL для производительности
 
 ### Таблицы:
 - `users` — пользователи (bcrypt пароли)
-- `chats` / `chat_members` — чаты и участники
-- `messages` / `reactions` — сообщения и реакции
-- `posts` / `likes` / `comments` — посты и лента
-- `stories` — истории (24 часа)
+- `chats` / `chat_members` — чаты
+- `messages` / `reactions` — сообщения
+- `posts` / `likes` — посты
+- `stories` — истории
 - `videos` — видео
 - `music` — музыка
-- `subscriptions` / `friends` — подписки
+- `subscriptions` — подписки
 - `notifications` — уведомления
 - `reports` — жалобы
-- `audit_log` — лог действий админов
-- `settings` — настройки сайта
-
-**Все данные хранятся на твоём ПК в одном файле БД!**
+- `audit_log` — лог действий
 
 ---
 
 ## 🔐 БЕЗОПАСНОСТЬ
 
-- ✅ bcrypt(12) для хэширования паролей
+- ✅ bcrypt(12) для паролей
 - ✅ JWT токены (7 дней)
-- ✅ Helmet (HTTP заголовки безопасности)
 - ✅ CORS
 - ✅ Prepared statements (защита от SQL-инъекций)
-- ✅ Role-based access control (user/moderator/admin/superadmin)
-- ✅ Audit log для всех админских действий
-- ✅ Блокировка забаненных пользователей
+- ✅ Role-based access control
+- ✅ Audit log
 
 ---
 
@@ -134,46 +133,39 @@ http://localhost:5173
 - `POST /api/auth/register` — регистрация
 - `POST /api/auth/login` — вход
 - `POST /api/auth/logout` — выход
-- `GET /api/auth/me` — текущий пользователь
 
 ### Users
-- `GET /api/users` — список пользователей
 - `GET /api/users/:id` — профиль
 - `PUT /api/users/me` — обновить профиль
-- `POST /api/users/:id/follow` — подписаться
-- `DELETE /api/users/:id/follow` — отписаться
 
-### Chats & Messages
+### Chats
 - `GET /api/chats` — мои чаты
 - `POST /api/chats` — создать чат
-- `GET /api/chats/:id/messages` — сообщения чата
-- `POST /api/chats/:id/messages` — отправить сообщение
+- `GET /api/chats/:id/messages` — сообщения
+- `POST /api/chats/:id/messages` — отправить
 - `POST /api/messages/:id/react` — реакция
 
 ### Posts
 - `GET /api/posts` — лента
 - `POST /api/posts` — создать пост
-- `POST /api/posts/:id/like` — лайк/анлайк
-- `DELETE /api/posts/:id` — удалить
+- `POST /api/posts/:id/like` — лайк
 
 ### Stories / Videos / Music
-- `GET /api/stories` — активные сторис
-- `POST /api/stories` — создать сторис
+- `GET /api/stories` — сторис
+- `POST /api/stories` — создать
 - `GET /api/videos` — видео
-- `POST /api/videos` — загрузить видео
+- `POST /api/videos` — загрузить
 - `GET /api/music` — треки
-- `POST /api/music` — загрузить трек
+- `POST /api/music` — загрузить
 
-### Admin (требует роль admin/superadmin)
+### Admin
 - `GET /api/admin/stats` — статистика
-- `GET /api/admin/users` — все пользователи
-- `PUT /api/admin/users/:id/ban` — заблокировать
-- `PUT /api/admin/users/:id/unban` — разблокировать
-- `PUT /api/admin/users/:id/role` — сменить роль
-- `DELETE /api/admin/users/:id` — удалить (только superadmin)
+- `GET /api/admin/users` — пользователи
+- `PUT /api/admin/users/:id/ban` — бан
+- `PUT /api/admin/users/:id/unban` — разбан
+- `DELETE /api/admin/users/:id` — удалить
 - `GET /api/admin/reports` — жалобы
-- `PUT /api/admin/reports/:id` — обработать жалобу
-- `GET /api/admin/audit-log` — лог действий
+- `GET /api/admin/audit-log` — логи
 
 ---
 
@@ -182,142 +174,68 @@ http://localhost:5173
 | Роль | Права |
 |------|-------|
 | `user` | Обычный пользователь |
-| `moderator` | + модерация жалоб, бан |
-| `admin` | + управление пользователями, настройки |
-| `superadmin` | + удаление пользователей, смена ролей |
+| `moderator` | + модерация |
+| `admin` | + управление |
+| `superadmin` | полный доступ |
 
 **Первый зарегистрированный = superadmin**
 
 ---
 
-## 📂 СТРУКТУРА ПРОЕКТА
+## 📂 СТРУКТУРА
 
 ```
 megachat/
-├── server/              # Backend (Node.js + Express + SQLite)
-│   ├── server.js        # Главный сервер + API
-│   ├── db.js            # Инициализация SQLite + миграции
-│   ├── package.json     # Зависимости сервера
-│   └── data/            # Автоматически создаётся
-│       └── messenger.db # SQLite база данных
-├── src/                 # Frontend (React + TypeScript)
-│   ├── App.tsx          # Главный компонент
-│   ├── store.ts         # API клиент
-│   ├── types.ts         # TypeScript типы
-│   └── index.css        # Стили (Tailwind)
-├── dist/                # Собранный фронтенд (после npm run build)
-├── package.json         # Зависимости фронтенда
-├── vite.config.js       # Конфигурация Vite
-├── tsconfig.json        # Конфигурация TypeScript
-└── README.md            # Этот файл
+├── start.bat              # Запуск одним кликом (Windows)
+├── server/
+│   ├── server.js          # Express + Socket.IO
+│   ├── db.js              # SQLite (sql.js)
+│   ├── package.json
+│   └── data/
+│       └── messenger.db   # База данных
+├── src/
+│   ├── App.tsx            # Фронтенд
+│   ├── store.ts           # API клиент
+│   ├── types.ts           # Типы
+│   └── index.css          # Стили
+├── dist/                  # Собранный фронтенд
+├── package.json
+└── README.md
 ```
 
 ---
 
-## 🌐 ХОСТИНГ В ИНТЕРНЕТЕ
-
-### Вариант 1 — Vercel (рекомендую)
-1. Зайди на https://vercel.com
-2. Войди через GitHub
-3. Загрузи проект
-4. Получишь ссылку типа: `https://megachat.vercel.app`
-
-### Вариант 2 — Netlify
-1. Зайди на https://netlify.com
-2. Перетащи папку `dist/` в браузер
-3. Получишь ссылку типа: `https://megachat.netlify.app`
-
-### Вариант 3 — Свой сервер
-```bash
-npm run build
-# Загрузи папку dist/ на любой хостинг
-# Запусти сервер на VPS: cd server && npm start
-```
-
----
-
-## 💾 РЕЗЕРВНОЕ КОПИРОВАНИЕ
-
-База данных хранится в одном файле: `server/data/messenger.db`
-
-Для бэкапа просто скопируй этот файл:
-```bash
-cp server/data/messenger.db backups/messenger-$(date +%Y%m%d).db
-```
-
----
-
-## 🔧 ТЕХНОЛОГИИ
-
-**Backend:**
-- Node.js + Express
-- SQLite (better-sqlite3)
-- Socket.IO (WebSocket)
-- JWT + bcrypt
-- Helmet + CORS
-
-**Frontend:**
-- React 18
-- TypeScript
-- Vite
-- Tailwind CSS 4
-- Lucide Icons
-
----
-
-## ❓ ПРОБЛЕМЫ И РЕШЕНИЯ
+## ❓ ПРОБЛЕМЫ
 
 ### "Cannot find module"
-```bash
+```cmd
 npm install
 cd server && npm install
 ```
 
 ### "Port already in use"
-Измени порт в `server/server.js`:
+Измените порт в `server/server.js`:
 ```javascript
-const PORT = process.env.PORT || 3002; // измени 3001 на 3002
+const PORT = 3002; // вместо 3001
 ```
 
 ### "Database error"
-Удали `server/data/messenger.db` и перезапусти сервер — БД создастся заново
-
-### "Cannot connect to server"
-Убедись что сервер запущен:
-```bash
-cd server && npm start
-```
-
----
-
-## 📝 КОМАНДЫ
-
-```bash
-# Разработка
-npm run dev              # Frontend (port 5173)
-cd server && npm start   # Backend (port 3001)
-
-# Сборка
-npm run build            # Собрать frontend в dist/
-
-# Продакшн
-cd server && npm start   # Запустит и API и раздаст dist/
-```
+Удалите `server/data/messenger.db` и перезапустите сервер.
 
 ---
 
 ## 🎯 ИТОГО
 
 ✅ Полностью рабочий мессенджер  
-✅ Реальная SQLite база данных на твоём ПК  
-✅ Без фейковых данных — всё настоящее  
-✅ Все функции работают через API  
-✅ Админ-панель с полным контролем  
-✅ Безопасность (bcrypt, JWT, Helmet)  
-✅ Готов к хостингу  
+✅ Реальная SQLite база данных  
+✅ Загрузка контента (посты, видео, музыка, сторис)  
+✅ Кастомизация профиля  
+✅ Админ-панель  
+✅ Безопасность  
+✅ Запуск одним кликом (start.bat)  
 
-**Запускай и пользуйся!** 🚀
+**Запускайте и пользуйтесь!** 🚀
 
 ---
 
-© MegaChat 2024 — Мессенджер нового поколения
+© MegaChat 2024
