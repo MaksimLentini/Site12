@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════
 import { User, Chat, Message, Post, Story, Video, MusicTrack, Notification } from './types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_URL = 'http://localhost:3001/api';
 
 let authToken: string | null = localStorage.getItem('megachat_token');
 
@@ -170,13 +170,6 @@ export const notifications = {
   }
 };
 
-// ═══ SEARCH ═══
-export const search = {
-  async query(q: string): Promise<{ users: User[]; posts: Post[] }> {
-    return api(`/search?q=${encodeURIComponent(q)}`);
-  }
-};
-
 // ═══ ADMIN ═══
 export const admin = {
   async stats(): Promise<Record<string, number>> {
@@ -205,11 +198,5 @@ export const admin = {
   },
   async getAuditLog(): Promise<any[]> {
     return api('/admin/audit-log');
-  },
-  async getSettings(): Promise<Record<string, string>> {
-    return api('/admin/settings');
-  },
-  async updateSettings(settings: Record<string, string>): Promise<void> {
-    await api('/admin/settings', { method: 'PUT', body: JSON.stringify(settings) });
   }
 };
