@@ -407,7 +407,14 @@ app.post('/api/chats', authenticate, (req, res) => {
   });
   
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
-  res.json({ ...chat, members: allMembers });
+  const result = { ...chat, members: allMembers };
+  
+  // Real-time обновление для всех участников
+  allMembers.forEach(memberId => {
+    io.to(`user_${memberId}`).emit('chat:created', result);
+  });
+  
+  res.json(result);
 });
 
 app.get('/api/chats/:id/messages', authenticate, (req, res) => {
@@ -463,6 +470,10 @@ app.post('/api/messages/:id/react', authenticate, (req, res) => {
   } else {
     db.prepare('INSERT INTO reactions (message_id, user_id, emoji, created_at) VALUES (?,?,?,?)').run(msgId, req.user.id, emoji, now());
   }
+  
+  // Real-time обновление реакций
+  io.emit('message:reaction', { messageId: msgId, userId: req.user.id, emoji });
+  
   res.json({ success: true });
 });
 
@@ -491,7 +502,12 @@ app.post('/api/posts', authenticate, (req, res) => {
     .run(id, req.user.id, content, type, JSON.stringify(media), JSON.stringify(hashtags), now());
   
   const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
-  res.json({ ...post, media, hashtags, likes: [] });
+  const result = { ...post, media, hashtags, likes: [] };
+  
+  // Real-time обновление для всех клиентов
+  io.emit('post:created', result);
+  
+  res.json(result);
 });
 
 app.post('/api/posts/:id/like', authenticate, (req, res) => {
@@ -506,6 +522,10 @@ app.post('/api/posts/:id/like', authenticate, (req, res) => {
     db.prepare('UPDATE posts SET likes_count = likes_count + 1 WHERE id = ?').run(postId);
   }
   const count = db.prepare('SELECT likes_count FROM posts WHERE id = ?').get(postId)?.likes_count || 0;
+  
+  // Real-time обновление лайков
+  io.emit('post:liked', { postId, likes: count, userId: req.user.id });
+  
   res.json({ likes: count });
 });
 
@@ -538,7 +558,13 @@ app.post('/api/stories', authenticate, (req, res) => {
   const expiresAt = now() + 24 * 60 * 60 * 1000;
   db.prepare('INSERT INTO stories (id, user_id, media, text_content, expires_at, created_at) VALUES (?,?,?,?,?,?)')
     .run(id, req.user.id, media, text || '', expiresAt, now());
-  res.json({ id, media, text, expires_at: expiresAt, created_at: now() });
+  
+  const result = { id, user_id: req.user.id, media, text, expires_at: expiresAt, created_at: now() };
+  
+  // Real-time обновление
+  io.emit('story:created', result);
+  
+  res.json(result);
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -563,7 +589,13 @@ app.post('/api/videos', authenticate, (req, res) => {
   const id = generateId();
   db.prepare('INSERT INTO videos (id, user_id, title, description, thumbnail, duration, tags_json, is_short, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
     .run(id, req.user.id, title, description || '', thumbnail || '', duration || 0, JSON.stringify(tags), is_short ? 1 : 0, now());
-  res.json({ id, title, description, thumbnail, duration, tags, is_short });
+  
+  const result = { id, user_id: req.user.id, title, description, thumbnail, duration, tags, is_short, views_count: 0, created_at: now() };
+  
+  // Real-time обновление
+  io.emit('video:created', result);
+  
+  res.json(result);
 });
 
 app.post('/api/videos/:id/view', authenticate, (req, res) => {
@@ -589,7 +621,13 @@ app.post('/api/music', authenticate, (req, res) => {
   const id = generateId();
   db.prepare('INSERT INTO music (id, user_id, title, artist, duration, cover, created_at) VALUES (?,?,?,?,?,?,?)')
     .run(id, req.user.id, title, artist || '', duration || 0, cover || '', now());
-  res.json({ id, title, artist, duration, cover });
+  
+  const result = { id, user_id: req.user.id, title, artist, duration, cover, plays_count: 0, created_at: now() };
+  
+  // Real-time обновление
+  io.emit('music:created', result);
+  
+  res.json(result);
 });
 
 // ═══════════════════════════════════════════════════════════
