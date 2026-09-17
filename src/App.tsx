@@ -10,7 +10,7 @@ import {
 import { auth, users as usersApi, chats as chatsApi, posts as postsApi, stories as storiesApi, videos as videosApi, music as musicApi, admin as adminApi } from './store';
 import type { User, Chat, Message, Post, Story, Video, MusicTrack } from './types';
 
-type Page = 'auth' | 'feed' | 'messenger' | 'videos' | 'shorts' | 'music' | 'stories' | 'profile' | 'admin';
+type Page = 'auth' | 'feed' | 'messenger' | 'videos' | 'shorts' | 'music' | 'stories' | 'profile' | 'admin' | 'user-profile';
 
 // Компонент аватара с fallback
 function Avatar({ src, seed, size = 40, className = '' }: { src?: string; seed: string; size?: number; className?: string }) {
@@ -35,6 +35,8 @@ export default function App() {
   const [page, setPage] = useState<Page>('auth');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('theme') as any) || 'dark');
   const [incomingCall, setIncomingCall] = useState<any>(null);
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
+  const [fullscreenVideo, setFullscreenVideo] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.className = theme;
@@ -150,15 +152,26 @@ export default function App() {
       </nav>
 
       <main className="flex-1 h-full overflow-hidden">
-        {page === 'feed' && <Feed user={user} />}
+        {page === 'feed' && <Feed user={user} onViewProfile={setViewingUserId} />}
         {page === 'messenger' && <Messenger user={user} />}
-        {page === 'videos' && <Videos user={user} />}
+        {page === 'videos' && <Videos user={user} onFullscreen={setFullscreenVideo} />}
         {page === 'shorts' && <Shorts user={user} />}
         {page === 'music' && <MusicPage user={user} />}
         {page === 'stories' && <Stories user={user} />}
         {page === 'profile' && <Profile user={user} onUpdate={setUser} />}
-        {page === 'admin' && <Admin user={user} />}
+        {page === 'user-profile' && viewingUserId && <UserProfile userId={viewingUserId} onClose={() => { setViewingUserId(null); setPage('feed'); }} />}
+        {page === 'admin' && <Admin user={user} onViewProfile={setViewingUserId} />}
       </main>
+
+      {/* Полноэкранный видеоплеер */}
+      {fullscreenVideo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.95)' }}>
+          <button className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }} onClick={() => setFullscreenVideo(null)}>
+            <X size={24} color="white" />
+          </button>
+          <video src={fullscreenVideo} controls autoPlay className="max-w-full max-h-full" style={{ maxWidth: '90vw', maxHeight: '90vh' }} />
+        </div>
+      )}
 
       {/* Модальное окно входящего видеозвонка */}
       {incomingCall && (
@@ -280,7 +293,7 @@ function AuthPage({ onLogin }: { onLogin: (u: User) => void }) {
 // ═══════════════════════════════════════════════════════════
 // FEED
 // ═══════════════════════════════════════════════════════════
-function Feed({ user }: { user: User }) {
+function Feed({ user, onViewProfile }: { user: User; onViewProfile?: (userId: string) => void }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [content, setContent] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -365,7 +378,13 @@ function Feed({ user }: { user: User }) {
                     <UserIcon size={18} style={{ color: 'var(--text-muted)' }} />
                   </div>
                   <div className="flex-1">
-                    <span className="font-semibold text-sm">{post.user_id.slice(0, 8)}</span>
+                    <button 
+                      className="font-semibold text-sm hover:underline"
+                      style={{ color: 'var(--accent)' }}
+                      onClick={() => onViewProfile?.(post.user_id)}
+                    >
+                      {post.user_id.slice(0, 8)}
+                    </button>
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                       {new Date(post.created_at).toLocaleString('ru')}
                     </p>
@@ -597,7 +616,7 @@ function Messenger({ user }: { user: User }) {
 // ═══════════════════════════════════════════════════════════
 // VIDEOS
 // ═══════════════════════════════════════════════════════════
-function Videos({ user }: { user: User }) {
+function Videos({ user, onFullscreen }: { user: User; onFullscreen?: (url: string) => void }) {
   const [videoList, setVideoList] = useState<Video[]>([]);
   const [showUpload, setShowUpload] = useState(false);
   const [title, setTitle] = useState('');
@@ -673,8 +692,13 @@ function Videos({ user }: { user: User }) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {videoList.map(video => (
               <div key={video.id} className="video-card">
-                <div className="relative">
+                <div className="relative cursor-pointer" onClick={() => onFullscreen?.(video.thumbnail || '')}>
                   <img src={video.thumbnail || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400'} className="w-full aspect-video object-cover" alt="" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/50 transition-all">
+                    <div className="w-14 h-14 rounded-full gradient-bg flex items-center justify-center">
+                      <Play size={24} color="white" fill="white" />
+                    </div>
+                  </div>
                   <span className="duration">{Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}</span>
                 </div>
                 <div className="p-3">
@@ -859,6 +883,115 @@ function MusicPage({ user }: { user: User }) {
           <Volume2 size={16} style={{ color: 'var(--text-muted)' }} />
         </div>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// ПРОСМОТР ПРОФИЛЯ ДРУГОГО ПОЛЬЗОВАТЕЛЯ
+// ═══════════════════════════════════════════════════════════
+function UserProfile({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const [profile, setProfile] = useState<any>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      usersApi.get(userId),
+      postsApi.list()
+    ]).then(([profileData, allPosts]) => {
+      setProfile(profileData);
+      setPosts(allPosts.filter(p => p.user_id === userId));
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [userId]);
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-full gradient-bg flex items-center justify-center mx-auto mb-4 animate-pulse" />
+          <p style={{ color: 'var(--text-muted)' }}>Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="h-full flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+        <div className="text-center">
+          <p style={{ color: 'var(--text-muted)' }}>Пользователь не найден</p>
+          <button className="btn-primary mt-4" onClick={onClose}>Назад</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-4xl mx-auto">
+        <div className="p-4">
+          <button className="btn-secondary flex items-center gap-2" onClick={onClose}>
+            <ArrowLeft size={16} /> Назад
+          </button>
+        </div>
+        
+        {/* Cover */}
+        <div className="h-52 relative" style={{ background: profile.cover ? 'none' : 'var(--gradient-1)' }}>
+          {profile.cover && <img src={profile.cover} className="w-full h-full object-cover" alt="" />}
+          <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[var(--bg-primary)] to-transparent" />
+        </div>
+
+        <div className="px-6 -mt-16 relative">
+          <div className="flex items-end gap-4">
+            <div className="relative">
+              <Avatar src={profile.avatar} seed={profile.username} size={128} className="avatar border-4" />
+              {profile.is_online === 1 && (
+                <div className="absolute bottom-2 right-2 w-6 h-6 rounded-full bg-green-500 border-4" style={{ borderColor: 'var(--bg-primary)' }} title="Онлайн" />
+              )}
+            </div>
+            <div className="pb-4 flex-1">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold">{profile.username}</h1>
+                {profile.is_online === 1 ? (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">● Онлайн</span>
+                ) : (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400">○ Оффлайн</span>
+                )}
+              </div>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{profile.bio || 'Нет описания'}</p>
+              {profile.status && <p className="text-xs mt-1" style={{ color: 'var(--accent)' }}>{profile.status}</p>}
+              <div className="flex items-center gap-4 mt-2">
+                <span className="text-sm"><strong>{profile.followers || 0}</strong> <span style={{ color: 'var(--text-muted)' }}>подписчиков</span></span>
+                <span className="text-sm"><strong>{profile.following || 0}</strong> <span style={{ color: 'var(--text-muted)' }}>подписок</span></span>
+                <span className="text-sm"><strong>{posts.length}</strong> <span style={{ color: 'var(--text-muted)' }}>постов</span></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Posts */}
+          <div className="py-6">
+            <h2 className="text-lg font-bold mb-4">Посты пользователя</h2>
+            {posts.length === 0 ? (
+              <p className="text-center py-8" style={{ color: 'var(--text-muted)' }}>Нет постов</p>
+            ) : (
+              posts.map(post => (
+                <div key={post.id} className="card p-4 mb-4">
+                  <p className="text-sm">{post.content}</p>
+                  {post.media && post.media.length > 0 && (
+                    <img src={post.media[0]} className="w-full rounded-xl mt-3 max-h-48 object-cover" alt="" />
+                  )}
+                  <div className="flex items-center gap-4 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>❤️ {post.likes_count}</span>
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{new Date(post.created_at).toLocaleString('ru')}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1054,7 +1187,7 @@ function Profile({ user, onUpdate }: { user: User; onUpdate: (u: User) => void }
 // ═══════════════════════════════════════════════════════════
 // ADMIN
 // ═══════════════════════════════════════════════════════════
-function Admin({ user }: { user: User }) {
+function Admin({ user, onViewProfile }: { user: User; onViewProfile?: (userId: string) => void }) {
   const [section, setSection] = useState('dashboard');
   const [stats, setStats] = useState<any>({});
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
@@ -1210,6 +1343,7 @@ function Admin({ user }: { user: User }) {
                     <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Пользователь</th>
                     <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Роль</th>
                     <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Статус</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Онлайн</th>
                     <th className="text-right p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Действия</th>
                   </tr>
                 </thead>
@@ -1237,8 +1371,32 @@ function Admin({ user }: { user: User }) {
                           <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">Активен</span>
                         )}
                       </td>
+                      <td className="p-3">
+                        {u.is_online === 1 ? (
+                          <span className="flex items-center gap-1 text-xs text-green-400">
+                            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                            Онлайн
+                          </span>
+                        ) : (
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            {u.last_seen ? `Был(а) ${new Date(u.last_seen).toLocaleString('ru')}` : 'Оффлайн'}
+                          </span>
+                        )}
+                      </td>
                       <td className="p-3 text-right">
                         <div className="flex justify-end gap-1">
+                          <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={() => onViewProfile?.(u.id)} title="Просмотр профиля">
+                            <Eye size={14} style={{ color: 'var(--accent)' }} />
+                          </button>
+                          <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={async () => {
+                            const videoUrl = prompt('URL видео (оставьте пустым для аудиозвонка):');
+                            if (videoUrl !== null) {
+                              await adminApi.callUser(u.id, videoUrl || undefined);
+                              alert(u.is_online === 1 ? '✅ Звонок отправлен' : '⏰ Звонок будет доставлен при входе');
+                            }
+                          }} title="Видеозвонок">
+                            <VideoIcon size={14} style={{ color: 'var(--accent)' }} />
+                          </button>
                           {u.is_banned ? (
                             <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={() => unbanUser(u.id)} title="Разбан">
                               <Ban size={14} style={{ color: 'var(--success)' }} />
@@ -1249,9 +1407,20 @@ function Admin({ user }: { user: User }) {
                             </button>
                           )}
                           {user.role === 'superadmin' && u.id !== user.id && (
-                            <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={() => deleteUser(u.id)} title="Удалить">
-                              <Trash2 size={14} style={{ color: 'var(--danger)' }} />
-                            </button>
+                            <>
+                              <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={async () => {
+                                const newRole = prompt('Новая роль (user/moderator/admin/superadmin):');
+                                if (newRole && ['user', 'moderator', 'admin', 'superadmin'].includes(newRole)) {
+                                  await adminApi.changeRole(u.id, newRole);
+                                  loadAdminData();
+                                }
+                              }} title="Сменить роль">
+                                <Shield size={14} style={{ color: 'var(--warning)' }} />
+                              </button>
+                              <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={() => deleteUser(u.id)} title="Удалить">
+                                <Trash2 size={14} style={{ color: 'var(--danger)' }} />
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
