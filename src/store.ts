@@ -1,7 +1,7 @@
 // ═══ API КЛИЕНТ ═══
 import { User, Chat, Message, Post, Story, Video, MusicTrack, Notification } from './types';
 
-const API_URL = '/api';
+const API_URL = 'http://localhost:3001/api';
 let authToken: string | null = localStorage.getItem('megachat_token');
 
 function setToken(token: string | null) {
@@ -17,21 +17,26 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-  
-  if (res.status === 401) {
-    setToken(null);
-    localStorage.removeItem('megachat_user');
-    window.location.reload();
-    throw new Error('Требуется авторизация');
+  try {
+    const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+    
+    if (res.status === 401) {
+      setToken(null);
+      localStorage.removeItem('megachat_user');
+      window.location.reload();
+      throw new Error('Требуется авторизация');
+    }
+    
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Ошибка сервера' }));
+      throw new Error(err.error || 'Ошибка запроса');
+    }
+    
+    return res.json();
+  } catch (error: any) {
+    if (error.message === 'Требуется авторизация') throw error;
+    throw new Error('Сервер недоступен. Запустите: cd server && npm start');
   }
-  
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Ошибка сервера' }));
-    throw new Error(err.error || 'Ошибка запроса');
-  }
-  
-  return res.json();
 }
 
 // ═══ AUTH ═══
