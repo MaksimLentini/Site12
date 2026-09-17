@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════
 import { User, Chat, Message, Post, Story, Video, MusicTrack, Notification } from './types';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 let authToken: string | null = localStorage.getItem('megachat_token');
 
