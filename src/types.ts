@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// ТИПЫ ДАННЫХ — совместимы с API (snake_case из SQLite)
+// ТИПЫ ДАННЫХ
 // ═══════════════════════════════════════════════════════════
 
 export type UserRole = 'user' | 'moderator' | 'admin' | 'superadmin';
@@ -8,22 +8,19 @@ export interface User {
   id: string;
   username: string;
   email: string;
-  password?: string;
   role: UserRole;
   avatar: string;
   cover: string;
   bio: string;
   status: string;
-  is_online?: number;
-  is_banned?: number;
+  is_online: number;
+  is_banned: number;
   ban_reason?: string;
   last_seen?: number;
   created_at?: number;
   followers?: number;
   following?: number;
   postsCount?: number;
-  settings_json?: string;
-  privacy_json?: string;
 }
 
 export interface Chat {
@@ -35,7 +32,6 @@ export interface Chat {
   created_by: string;
   created_at: number;
   lastMessage?: Message;
-  is_secret?: number;
 }
 
 export interface Message {
@@ -46,8 +42,6 @@ export interface Message {
   type: string;
   reply_to?: string;
   reactions?: Record<string, string[]>;
-  is_edited?: number;
-  is_deleted?: number;
   created_at: number;
 }
 
@@ -60,8 +54,6 @@ export interface Post {
   likes?: string[];
   likes_count: number;
   comments_count: number;
-  shares_count?: number;
-  is_hidden?: number;
   hashtags?: string[];
   created_at: number;
 }
@@ -71,7 +63,6 @@ export interface Story {
   user_id: string;
   media: string;
   text?: string;
-  text_content?: string;
   expires_at: number;
   created_at: number;
 }
@@ -84,7 +75,6 @@ export interface Video {
   thumbnail: string;
   duration: number;
   views_count: number;
-  likes_count?: number;
   tags?: string[];
   is_short?: number;
   created_at: number;
@@ -109,5 +99,4 @@ export interface Notification {
   body: string;
   is_read: number;
   created_at: number;
-  link?: string;
 }
