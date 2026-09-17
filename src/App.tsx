@@ -30,14 +30,71 @@ function Avatar({ src, seed, size = 40, className = '' }: { src?: string; seed: 
 }
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(auth.getLocalUser());
-  const [page, setPage] = useState<Page>(user ? 'feed' : 'auth');
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState<Page>('auth');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('theme') as any) || 'dark');
+  const [incomingCall, setIncomingCall] = useState<any>(null);
 
   useEffect(() => {
     document.documentElement.className = theme;
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  // При загрузке проверяем авторизацию через API
+  useEffect(() => {
+    if (auth.isLoggedIn()) {
+      auth.getCurrentUser()
+        .then(u => {
+          setUser(u);
+          setPage('feed');
+        })
+        .catch(() => {
+          // Токен невалиден
+          setUser(null);
+          setPage('auth');
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  // Обработчик входящих видеозвонков от админа
+  useEffect(() => {
+    if (!user) return;
+    
+    // Имитация WebSocket для видеозвонков (в реальности нужен Socket.IO client)
+    const checkCalls = setInterval(async () => {
+      try {
+        // Проверить входящие звонки через API
+        const response = await fetch('/api/notifications/calls', {
+          headers: { 'Authorization': 'Bearer ' + (auth as any).authToken }
+        });
+        if (response.ok) {
+          const calls = await response.json();
+          if (calls.length > 0) {
+            setIncomingCall(calls[0]);
+          }
+        }
+      } catch {}
+    }, 5000);
+    
+    return () => clearInterval(checkCalls);
+  }, [user]);
+
+  if (loading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+        <div className="text-center">
+          <div className="w-16 h-16 rounded-2xl gradient-bg flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <Zap size={32} color="white" />
+          </div>
+          <p style={{ color: 'var(--text-muted)' }}>Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return <AuthPage onLogin={(u) => { setUser(u); setPage('feed'); }} />;
@@ -102,6 +159,36 @@ export default function App() {
         {page === 'profile' && <Profile user={user} onUpdate={setUser} />}
         {page === 'admin' && <Admin user={user} />}
       </main>
+
+      {/* Модальное окно входящего видеозвонка */}
+      {incomingCall && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.8)' }}>
+          <div className="card p-6 max-w-md w-full mx-4">
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <VideoIcon size={32} color="white" />
+              </div>
+              <h2 className="text-xl font-bold mb-2">Входящий видеозвонок</h2>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                От: <strong>{incomingCall.from}</strong>
+              </p>
+            </div>
+            {incomingCall.videoUrl && (
+              <div className="mb-4">
+                <video src={incomingCall.videoUrl} controls autoPlay className="w-full rounded-lg" />
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button className="btn-primary flex-1" onClick={() => setIncomingCall(null)}>
+                Принять
+              </button>
+              <button className="btn-secondary flex-1" onClick={() => setIncomingCall(null)}>
+                Отклонить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -875,10 +962,11 @@ function Profile({ user, onUpdate }: { user: User; onUpdate: (u: User) => void }
   const saveProfile = async () => {
     try {
       await usersApi.update({ bio, status, avatar: avatarUrl, cover: coverUrl });
-      const updated = { ...user, bio, status, avatar: avatarUrl, cover: coverUrl };
-      localStorage.setItem('megachat_user', JSON.stringify(updated));
-      onUpdate(updated);
+      // Загрузить обновленные данные из БД
+      const updatedUser = await auth.getCurrentUser();
+      onUpdate(updatedUser);
       setIsEditing(false);
+      alert('✅ Профиль обновлён');
     } catch (err: any) {
       alert('Ошибка: ' + err.message);
     }
@@ -972,25 +1060,58 @@ function Admin({ user }: { user: User }) {
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
   const [reports, setReports] = useState<any[]>([]);
   const [auditLog, setAuditLog] = useState<any[]>([]);
+  const [ipBans, setIpBans] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [callUserId, setCallUserId] = useState('');
+  const [callVideoUrl, setCallVideoUrl] = useState('');
+  const [newIpBan, setNewIpBan] = useState({ ip: '', reason: '', hours: 24 });
 
   const loadAdminData = async () => {
     try {
-      const [statsData, usersData, reportsData, auditData] = await Promise.all([
+      const [statsData, usersData, reportsData, auditData, ipBansData, sessionsData] = await Promise.all([
         adminApi.stats(),
         adminApi.getUsers(),
         adminApi.getReports(),
-        adminApi.getAuditLog()
+        adminApi.getAuditLog(),
+        adminApi.getIpBans(),
+        adminApi.getActiveSessions()
       ]);
       setStats(statsData);
       setAdminUsers(usersData);
       setReports(reportsData);
       setAuditLog(auditData);
+      setIpBans(ipBansData);
+      setSessions(sessionsData);
     } catch (err) {
       console.error('Failed to load admin data:', err);
     }
   };
 
   useEffect(() => { loadAdminData(); }, []);
+
+  const handleCallUser = async () => {
+    if (!callUserId) return;
+    try {
+      const result: any = await adminApi.callUser(callUserId, callVideoUrl || undefined);
+      alert(result.isOnline ? '✅ Видеозвонок отправлен (пользователь онлайн)' : '⏰ Звонок поставлен в очередь (пользователь получит при входе)');
+      setCallUserId('');
+      setCallVideoUrl('');
+    } catch (err: any) {
+      alert('Ошибка: ' + err.message);
+    }
+  };
+
+  const handleBanIp = async () => {
+    if (!newIpBan.ip) return;
+    try {
+      await adminApi.banIp(newIpBan.ip, newIpBan.reason);
+      alert('✅ IP заблокирован');
+      setNewIpBan({ ip: '', reason: '', hours: 24 });
+      loadAdminData();
+    } catch (err: any) {
+      alert('Ошибка: ' + err.message);
+    }
+  };
 
   const banUser = async (userId: string, reason: string) => {
     try {
@@ -1041,6 +1162,9 @@ function Admin({ user }: { user: User }) {
             { id: 'dashboard', label: 'Дашборд', icon: <BarChart3 size={18} /> },
             { id: 'users', label: 'Пользователи', icon: <Users size={18} /> },
             { id: 'reports', label: 'Жалобы', icon: <AlertTriangle size={18} /> },
+            { id: 'ipbans', label: 'IP баны', icon: <Lock size={18} /> },
+            { id: 'sessions', label: 'Сессии', icon: <Eye size={18} /> },
+            { id: 'calls', label: 'Видеозвонки', icon: <VideoIcon size={18} /> },
             { id: 'logs', label: 'Логи', icon: <Eye size={18} /> },
           ].map(item => (
             <div
@@ -1166,6 +1290,119 @@ function Admin({ user }: { user: User }) {
                 </div>
               ))
             )}
+          </div>
+        )}
+        {section === 'ipbans' && (
+          <div>
+            <h1 className="text-2xl font-bold mb-6">IP баны ({ipBans.length})</h1>
+            <div className="card p-4 mb-6">
+              <h3 className="font-bold mb-3">Заблокировать IP</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                <input className="input-field" placeholder="IP адрес *" value={newIpBan.ip} onChange={e => setNewIpBan({ ...newIpBan, ip: e.target.value })} />
+                <input className="input-field" placeholder="Причина" value={newIpBan.reason} onChange={e => setNewIpBan({ ...newIpBan, reason: e.target.value })} />
+                <input className="input-field" type="number" placeholder="Часы (0 = навсегда)" value={newIpBan.hours} onChange={e => setNewIpBan({ ...newIpBan, hours: parseInt(e.target.value) || 0 })} />
+              </div>
+              <button className="btn-primary" onClick={handleBanIp}>Заблокировать</button>
+            </div>
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+              <table className="w-full">
+                <thead>
+                  <tr style={{ background: 'var(--bg-tertiary)' }}>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>IP</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Причина</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>До</th>
+                    <th className="text-right p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ipBans.map(ban => (
+                    <tr key={ban.id} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                      <td className="p-3 font-mono text-sm">{ban.ip_cidr}</td>
+                      <td className="p-3 text-sm">{ban.reason || '-'}</td>
+                      <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {ban.until ? new Date(ban.until).toLocaleString() : 'Навсегда'}
+                      </td>
+                      <td className="p-3 text-right">
+                        <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={async () => { await adminApi.unbanIp(ban.id); loadAdminData(); }} title="Разбанить">
+                          <Ban size={14} style={{ color: 'var(--success)' }} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {section === 'sessions' && (
+          <div>
+            <h1 className="text-2xl font-bold mb-6">Активные сессии ({sessions.length})</h1>
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+              <table className="w-full">
+                <thead>
+                  <tr style={{ background: 'var(--bg-tertiary)' }}>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Пользователь</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>IP</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Устройство</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Последняя активность</th>
+                    <th className="text-right p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map(session => (
+                    <tr key={session.id} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                      <td className="p-3">
+                        <p className="font-medium text-sm">{session.username}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{session.email}</p>
+                      </td>
+                      <td className="p-3 font-mono text-xs">{session.ip}</td>
+                      <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {session.user_agent?.substring(0, 50) || '-'}...
+                      </td>
+                      <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {new Date(session.last_active).toLocaleString()}
+                      </td>
+                      <td className="p-3 text-right">
+                        <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={async () => { await adminApi.revokeSession(session.id); loadAdminData(); }} title="Завершить сессию">
+                          <X size={14} style={{ color: 'var(--danger)' }} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {section === 'calls' && (
+          <div>
+            <h1 className="text-2xl font-bold mb-6">Видеозвонки пользователям</h1>
+            <div className="card p-4 mb-6">
+              <h3 className="font-bold mb-3">Отправить видеозвонок</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>ID пользователя</label>
+                  <input className="input-field" placeholder="UUID пользователя" value={callUserId} onChange={e => setCallUserId(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>URL видео (необязательно)</label>
+                  <input className="input-field" placeholder="https://example.com/video.mp4" value={callVideoUrl} onChange={e => setCallVideoUrl(e.target.value)} />
+                </div>
+                <button className="btn-primary" onClick={handleCallUser}>
+                  <VideoIcon size={16} className="inline mr-2" />
+                  Отправить видеозвонок
+                </button>
+              </div>
+            </div>
+            <div className="card p-4">
+              <h3 className="font-bold mb-3">Как это работает</h3>
+              <ul className="text-sm space-y-2" style={{ color: 'var(--text-secondary)' }}>
+                <li>✅ Если пользователь <strong>онлайн</strong> — видеозвонок появится сразу</li>
+                <li>⏰ Если пользователь <strong>оффлайн</strong> — звонок будет доставлен при следующем входе</li>
+                <li>🎥 Можно указать URL видео или отправить только аудиозвонок</li>
+                <li>📝 Все действия записываются в Audit Log</li>
+              </ul>
+            </div>
           </div>
         )}
         {section === 'logs' && (

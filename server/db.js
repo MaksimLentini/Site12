@@ -483,6 +483,27 @@ function runMigrations() {
           created_at INTEGER NOT NULL
         );
       `
+    },
+    {
+      version: 15,
+      sql: `
+        CREATE TABLE IF NOT EXISTS active_sessions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          ip TEXT DEFAULT '',
+          user_agent TEXT DEFAULT '',
+          created_at INTEGER NOT NULL,
+          last_active INTEGER NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS system_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_user ON active_sessions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_active ON active_sessions(last_active);
+      `
     }
   ];
 
