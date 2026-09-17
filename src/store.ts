@@ -1,19 +1,17 @@
 // ═══ API КЛИЕНТ — БЕЗ LOCALSTORAGE ДЛЯ ДАННЫХ ═══
 import type { User, Chat, Message, Post, Story, Video, MusicTrack } from './types';
 
-// Токен хранится в памяти (не в localStorage для безопасности)
-let authToken: string | null = null;
-
+// Токен хранится в localStorage для сохранения сессии
 function getToken(): string | null {
-  return authToken;
+  return localStorage.getItem('megachat_token');
 }
 
 function saveToken(token: string) {
-  authToken = token;
+  localStorage.setItem('megachat_token', token);
 }
 
 function clearToken() {
-  authToken = null;
+  localStorage.removeItem('megachat_token');
 }
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
