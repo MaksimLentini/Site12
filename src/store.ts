@@ -182,5 +182,18 @@ export const admin = {
   getSettings() { return api<Record<string, string>>('/admin/settings'); },
   updateSettings(settings: Record<string, string>) {
     return api('/admin/settings', { method: 'PUT', body: JSON.stringify(settings) });
+  },
+  // Управление аккаунтами через файл
+  async getAccounts() {
+    return api<any[]>('/admin/accounts');
+  },
+  async editAccount(id: string, data: any) {
+    return api(`/admin/accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  async deleteAccount(id: string) {
+    return api(`/admin/accounts/${id}`, { method: 'DELETE' });
+  },
+  async createAccount(data: { username: string; email: string; password: string; role?: string }) {
+    return api('/admin/accounts', { method: 'POST', body: JSON.stringify(data) });
   }
 };

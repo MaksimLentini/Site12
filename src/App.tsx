@@ -1198,16 +1198,21 @@ function Admin({ user, onViewProfile }: { user: User; onViewProfile?: (userId: s
   const [callUserId, setCallUserId] = useState('');
   const [callVideoUrl, setCallVideoUrl] = useState('');
   const [newIpBan, setNewIpBan] = useState({ ip: '', reason: '', hours: 24 });
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [editingAccount, setEditingAccount] = useState<any>(null);
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
+  const [newAccount, setNewAccount] = useState({ username: '', email: '', password: '', role: 'user' });
 
   const loadAdminData = async () => {
     try {
-      const [statsData, usersData, reportsData, auditData, ipBansData, sessionsData] = await Promise.all([
+      const [statsData, usersData, reportsData, auditData, ipBansData, sessionsData, accountsData] = await Promise.all([
         adminApi.stats(),
         adminApi.getUsers(),
         adminApi.getReports(),
         adminApi.getAuditLog(),
         adminApi.getIpBans(),
-        adminApi.getActiveSessions()
+        adminApi.getActiveSessions(),
+        adminApi.getAccounts()
       ]);
       setStats(statsData);
       setAdminUsers(usersData);
@@ -1215,6 +1220,7 @@ function Admin({ user, onViewProfile }: { user: User; onViewProfile?: (userId: s
       setAuditLog(auditData);
       setIpBans(ipBansData);
       setSessions(sessionsData);
+      setAccounts(accountsData);
     } catch (err) {
       console.error('Failed to load admin data:', err);
     }
@@ -1294,6 +1300,7 @@ function Admin({ user, onViewProfile }: { user: User; onViewProfile?: (userId: s
           {[
             { id: 'dashboard', label: 'Дашборд', icon: <BarChart3 size={18} /> },
             { id: 'users', label: 'Пользователи', icon: <Users size={18} /> },
+            { id: 'accounts', label: 'Все аккаунты', icon: <FileText size={18} /> },
             { id: 'reports', label: 'Жалобы', icon: <AlertTriangle size={18} /> },
             { id: 'ipbans', label: 'IP баны', icon: <Lock size={18} /> },
             { id: 'sessions', label: 'Сессии', icon: <Eye size={18} /> },
@@ -1428,6 +1435,208 @@ function Admin({ user, onViewProfile }: { user: User; onViewProfile?: (userId: s
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+        {section === 'accounts' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h1 className="text-2xl font-bold">Все аккаунты ({accounts.length})</h1>
+              <button className="btn-primary flex items-center gap-2" onClick={() => setShowCreateAccount(!showCreateAccount)}>
+                <Plus size={16} /> Создать аккаунт
+              </button>
+            </div>
+
+            {/* Форма создания аккаунта */}
+            {showCreateAccount && (
+              <div className="card p-4 mb-6">
+                <h3 className="font-bold mb-3">Создать новый аккаунт</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <input className="input-field" placeholder="Имя пользователя *" value={newAccount.username} onChange={e => setNewAccount({ ...newAccount, username: e.target.value })} />
+                  <input className="input-field" type="email" placeholder="Email *" value={newAccount.email} onChange={e => setNewAccount({ ...newAccount, email: e.target.value })} />
+                  <input className="input-field" type="password" placeholder="Пароль * (мин. 6 символов)" value={newAccount.password} onChange={e => setNewAccount({ ...newAccount, password: e.target.value })} />
+                  <select className="input-field" value={newAccount.role} onChange={e => setNewAccount({ ...newAccount, role: e.target.value })}>
+                    <option value="user">Пользователь</option>
+                    <option value="moderator">Модератор</option>
+                    <option value="admin">Админ</option>
+                    <option value="superadmin">Суперадмин</option>
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn-primary" onClick={async () => {
+                    try {
+                      await adminApi.createAccount(newAccount);
+                      alert('✅ Аккаунт создан');
+                      setNewAccount({ username: '', email: '', password: '', role: 'user' });
+                      setShowCreateAccount(false);
+                      loadAdminData();
+                    } catch (err: any) {
+                      alert('Ошибка: ' + err.message);
+                    }
+                  }}>Создать</button>
+                  <button className="btn-secondary" onClick={() => setShowCreateAccount(false)}>Отмена</button>
+                </div>
+              </div>
+            )}
+
+            {/* Форма редактирования аккаунта */}
+            {editingAccount && (
+              <div className="card p-4 mb-6">
+                <h3 className="font-bold mb-3">Редактировать аккаунт: {editingAccount.username}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>Имя пользователя</label>
+                    <input className="input-field" value={editingAccount.username} onChange={e => setEditingAccount({ ...editingAccount, username: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>Email</label>
+                    <input className="input-field" type="email" value={editingAccount.email} onChange={e => setEditingAccount({ ...editingAccount, email: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>Новый пароль (оставьте пустым чтобы не менять)</label>
+                    <input className="input-field" type="password" placeholder="••••••" value={editingAccount.newPassword || ''} onChange={e => setEditingAccount({ ...editingAccount, newPassword: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>Роль</label>
+                    <select className="input-field" value={editingAccount.role} onChange={e => setEditingAccount({ ...editingAccount, role: e.target.value })}>
+                      <option value="user">Пользователь</option>
+                      <option value="moderator">Модератор</option>
+                      <option value="admin">Админ</option>
+                      <option value="superadmin">Суперадмин</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>Аватар (URL)</label>
+                    <input className="input-field" value={editingAccount.avatar || ''} onChange={e => setEditingAccount({ ...editingAccount, avatar: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>Обложка (URL)</label>
+                    <input className="input-field" value={editingAccount.cover || ''} onChange={e => setEditingAccount({ ...editingAccount, cover: e.target.value })} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>О себе</label>
+                    <textarea className="input-field h-20 resize-none" value={editingAccount.bio || ''} onChange={e => setEditingAccount({ ...editingAccount, bio: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>Статус</label>
+                    <input className="input-field" value={editingAccount.status || ''} onChange={e => setEditingAccount({ ...editingAccount, status: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>Заблокирован</label>
+                    <select className="input-field" value={editingAccount.is_banned ? '1' : '0'} onChange={e => setEditingAccount({ ...editingAccount, is_banned: e.target.value === '1' })}>
+                      <option value="0">Нет</option>
+                      <option value="1">Да</option>
+                    </select>
+                  </div>
+                  {editingAccount.is_banned && (
+                    <div className="md:col-span-2">
+                      <label className="text-sm font-medium block mb-1" style={{ color: 'var(--text-secondary)' }}>Причина бана</label>
+                      <input className="input-field" value={editingAccount.ban_reason || ''} onChange={e => setEditingAccount({ ...editingAccount, ban_reason: e.target.value })} />
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn-primary" onClick={async () => {
+                    try {
+                      const updateData: any = {
+                        username: editingAccount.username,
+                        email: editingAccount.email,
+                        role: editingAccount.role,
+                        avatar: editingAccount.avatar,
+                        cover: editingAccount.cover,
+                        bio: editingAccount.bio,
+                        status: editingAccount.status,
+                        is_banned: editingAccount.is_banned,
+                        ban_reason: editingAccount.ban_reason
+                      };
+                      if (editingAccount.newPassword && editingAccount.newPassword.length >= 6) {
+                        updateData.password = editingAccount.newPassword;
+                      }
+                      await adminApi.editAccount(editingAccount.id, updateData);
+                      alert('✅ Аккаунт обновлён');
+                      setEditingAccount(null);
+                      loadAdminData();
+                    } catch (err: any) {
+                      alert('Ошибка: ' + err.message);
+                    }
+                  }}>Сохранить</button>
+                  <button className="btn-secondary" onClick={() => setEditingAccount(null)}>Отмена</button>
+                </div>
+              </div>
+            )}
+
+            {/* Список аккаунтов */}
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+              <table className="w-full">
+                <thead>
+                  <tr style={{ background: 'var(--bg-tertiary)' }}>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>ID</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Имя</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Email</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Роль</th>
+                    <th className="text-left p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Статус</th>
+                    <th className="text-right p-3 text-xs" style={{ color: 'var(--text-muted)' }}>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accounts.map(acc => (
+                    <tr key={acc.id} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                      <td className="p-3 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{acc.id.slice(0, 8)}</td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          <Avatar src={acc.avatar} seed={acc.username} size={28} />
+                          <span className="font-medium text-sm">{acc.username}</span>
+                        </div>
+                      </td>
+                      <td className="p-3 text-sm">{acc.email}</td>
+                      <td className="p-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          acc.role === 'superadmin' ? 'bg-yellow-500/20 text-yellow-400' :
+                          acc.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
+                          acc.role === 'moderator' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-gray-500/20 text-gray-400'
+                        }`}>{acc.role}</span>
+                      </td>
+                      <td className="p-3">
+                        {acc.is_banned ? (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">Заблокирован</span>
+                        ) : (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">Активен</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="flex justify-end gap-1">
+                          <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={() => setEditingAccount(acc)} title="Редактировать">
+                            <Edit size={14} style={{ color: 'var(--accent)' }} />
+                          </button>
+                          {user.role === 'superadmin' && acc.id !== user.id && (
+                            <button className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]" onClick={async () => {
+                              if (confirm(`Удалить аккаунт ${acc.username}? Это действие необратимо.`)) {
+                                try {
+                                  await adminApi.deleteAccount(acc.id);
+                                  alert('✅ Аккаунт удалён');
+                                  loadAdminData();
+                                } catch (err: any) {
+                                  alert('Ошибка: ' + err.message);
+                                }
+                              }
+                            }} title="Удалить">
+                              <Trash2 size={14} style={{ color: 'var(--danger)' }} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--bg-tertiary)' }}>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                💾 Все аккаунты сохраняются в файле <code>server/data/accounts.json</code>. 
+                Изменения синхронизируются с базой данных автоматически.
+              </p>
             </div>
           </div>
         )}
