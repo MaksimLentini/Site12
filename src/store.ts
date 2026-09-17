@@ -1,17 +1,19 @@
-// ═══ API КЛИЕНТ ═══
+// ═══ API КЛИЕНТ — БЕЗ LOCALSTORAGE ДЛЯ ДАННЫХ ═══
 import type { User, Chat, Message, Post, Story, Video, MusicTrack } from './types';
 
+// Токен хранится в памяти (не в localStorage для безопасности)
+let authToken: string | null = null;
+
 function getToken(): string | null {
-  return localStorage.getItem('megachat_token');
+  return authToken;
 }
 
 function saveToken(token: string) {
-  localStorage.setItem('megachat_token', token);
+  authToken = token;
 }
 
 function clearToken() {
-  localStorage.removeItem('megachat_token');
-  localStorage.removeItem('megachat_user');
+  authToken = null;
 }
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -43,7 +45,6 @@ export const auth = {
       method: 'POST', body: JSON.stringify({ username, email, password })
     }).then(data => {
       saveToken(data.token);
-      localStorage.setItem('megachat_user', JSON.stringify(data.user));
       console.log('[AUTH] ✅ Успешно');
       return data;
     });
@@ -54,7 +55,6 @@ export const auth = {
       method: 'POST', body: JSON.stringify({ username, password })
     }).then(data => {
       saveToken(data.token);
-      localStorage.setItem('megachat_user', JSON.stringify(data.user));
       console.log('[AUTH] ✅ Успешно, токен:', data.token.substring(0, 30) + '...');
       return data;
     });
@@ -69,14 +69,11 @@ export const auth = {
     }
     clearToken();
   },
-  getLocalUser(): User | null {
-    try {
-      const data = localStorage.getItem('megachat_user');
-      return data ? JSON.parse(data) : null;
-    } catch { return null; }
+  getCurrentUser(): Promise<User> {
+    return api<User>('/auth/me');
   },
   isLoggedIn(): boolean {
-    return !!getToken() && !!localStorage.getItem('megachat_user');
+    return !!getToken();
   }
 };
 
@@ -86,6 +83,10 @@ export const users = {
   },
   update(data: any) {
     return api('/users/me', { method: 'PUT', body: JSON.stringify(data) });
+  },
+  list(search?: string) {
+    const q = search ? `?search=${encodeURIComponent(search)}` : '';
+    return api<{ users: User[]; total: number }>(`/users${q}`);
   }
 };
 
@@ -139,7 +140,10 @@ export const music = {
 
 export const admin = {
   stats() { return api<Record<string, number>>('/admin/stats'); },
-  getUsers() { return api<User[]>('/admin/users'); },
+  getUsers(search?: string) {
+    const q = search ? `?search=${encodeURIComponent(search)}` : '';
+    return api<User[]>(`/admin/users${q}`);
+  },
   banUser(id: string, reason?: string) {
     return api(`/admin/users/${id}/ban`, { method: 'PUT', body: JSON.stringify({ reason }) });
   },
@@ -149,9 +153,34 @@ export const admin = {
   deleteUser(id: string) {
     return api(`/admin/users/${id}`, { method: 'DELETE' });
   },
+  changeRole(id: string, role: string) {
+    return api(`/admin/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
+  },
   getReports() { return api<any[]>('/admin/reports'); },
   resolveReport(id: string, status: string) {
     return api(`/admin/reports/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
   },
-  getAuditLog() { return api<any[]>('/admin/audit-log'); }
+  getAuditLog() { return api<any[]>('/admin/audit-log'); },
+  // IP баны
+  getIpBans() { return api<any[]>('/admin/ip-bans'); },
+  banIp(ip: string, reason?: string) {
+    return api('/admin/ip-bans', { method: 'POST', body: JSON.stringify({ ip, reason }) });
+  },
+  unbanIp(id: string) {
+    return api(`/admin/ip-bans/${id}`, { method: 'DELETE' });
+  },
+  // Активные сессии
+  getActiveSessions() { return api<any[]>('/admin/sessions'); },
+  revokeSession(sessionId: string) {
+    return api(`/admin/sessions/${sessionId}`, { method: 'DELETE' });
+  },
+  // Видеозвонки
+  callUser(userId: string, videoUrl?: string) {
+    return api('/admin/call', { method: 'POST', body: JSON.stringify({ userId, videoUrl }) });
+  },
+  // Системные настройки
+  getSettings() { return api<Record<string, string>>('/admin/settings'); },
+  updateSettings(settings: Record<string, string>) {
+    return api('/admin/settings', { method: 'PUT', body: JSON.stringify(settings) });
+  }
 };

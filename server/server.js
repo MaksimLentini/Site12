@@ -30,7 +30,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 // ═══ MIDDLEWARE ═══
 app.use(compression());
 app.use(cors({ 
-  origin: true, // Разрешить любой origin
+  origin: true,
   credentials: true, 
   methods: ['GET','POST','PUT','DELETE','OPTIONS'], 
   allowedHeaders: ['Content-Type','Authorization'] 
@@ -38,7 +38,63 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
-// Статика (dist фронтенда) — ищем в корне проекта
+// ═══ ЗАЩИТА ОТ DDoS И RATE LIMITING ═══
+const requestCounts = new Map();
+const ipBanList = new Set();
+
+// Очистка старых запросов каждые 5 минут
+setInterval(() => {
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  for (const [ip, data] of requestCounts.entries()) {
+    data.requests = data.requests.filter(t => t > fiveMinutesAgo);
+    if (data.requests.length === 0) requestCounts.delete(ip);
+  }
+}, 5 * 60 * 1000);
+
+// Rate limiting middleware
+app.use((req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  
+  // Проверка IP бана
+  if (ipBanList.has(ip)) {
+    console.log('[SECURITY] ❌ Заблокированный IP:', ip);
+    return res.status(403).json({ error: 'Доступ заблокирован' });
+  }
+  
+  // Rate limiting (100 запросов за 5 минут)
+  if (!requestCounts.has(ip)) {
+    requestCounts.set(ip, { requests: [] });
+  }
+  const data = requestCounts.get(ip);
+  data.requests.push(Date.now());
+  
+  if (data.requests.length > 100) {
+    console.log('[SECURITY] ⚠️ Rate limit превышен для IP:', ip);
+    return res.status(429).json({ error: 'Слишком много запросов. Попробуйте позже.' });
+  }
+  
+  next();
+});
+
+// Helmet для безопасности
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'", "blob:"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Статика (dist фронтенда)
 const distPath = join(__dirname, '..', 'dist');
 console.log(`[STATIC] Раздаю статику из: ${distPath}`);
 app.use(express.static(distPath));
@@ -51,34 +107,39 @@ function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.cookies?.token;
   
-  console.log('[AUTH] Проверка токена для:', req.path, 'Token:', token ? token.substring(0, 20) + '...' : 'отсутствует');
-  
   if (!token) {
-    console.log('[AUTH] ❌ Токен отсутствует');
     return res.status(401).json({ error: 'Требуется авторизация' });
   }
   
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log('[AUTH] Токен декодирован:', decoded);
-    
     const db = getDb();
     req.user = db.prepare('SELECT id, username, email, role, avatar, bio, is_banned FROM users WHERE id = ?').get(decoded.userId);
     
     if (!req.user) {
-      console.log('[AUTH] ❌ Пользователь не найден в БД');
       return res.status(401).json({ error: 'Пользователь не найден' });
     }
     
     if (req.user.is_banned) {
-      console.log('[AUTH] ❌ Аккаунт заблокирован');
       return res.status(403).json({ error: 'Аккаунт заблокирован' });
     }
     
-    console.log('[AUTH] ✅ Авторизация успешна:', req.user.username);
+    // Обновить сессию в БД
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'] || '';
+    const sessionId = `session_${req.user.id}_${Date.now()}`;
+    
+    try {
+      db.prepare(`
+        INSERT OR REPLACE INTO active_sessions (id, user_id, ip, user_agent, created_at, last_active) 
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(sessionId, req.user.id, ip, userAgent, now(), now());
+    } catch (e) {
+      console.error('[SESSION] Ошибка сохранения сессии:', e.message);
+    }
+    
     next();
   } catch (err) {
-    console.log('[AUTH] ❌ Ошибка верификации токена:', err.message);
     return res.status(401).json({ error: 'Недействительный токен' });
   }
 }
@@ -552,7 +613,7 @@ app.get('/api/admin/audit-log', authenticate, requireRole('admin', 'superadmin')
 
 app.get('/api/admin/settings', authenticate, requireRole('admin', 'superadmin'), (req, res) => {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM settings').all();
+  const rows = db.prepare('SELECT * FROM system_settings').all();
   const settings = {};
   rows.forEach(r => settings[r.key] = r.value);
   res.json(settings);
@@ -562,10 +623,119 @@ app.put('/api/admin/settings', authenticate, requireRole('superadmin'), (req, re
   const db = getDb();
   const updates = req.body;
   for (const [key, value] of Object.entries(updates)) {
-    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, String(value));
+    db.prepare('INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)').run(key, String(value), now());
   }
   addAuditLog(req.user.id, 'update_settings', 'settings', '', JSON.stringify(Object.keys(updates)), req.ip);
   res.json({ success: true });
+});
+
+// ═══ IP БАНЫ ═══
+app.get('/api/admin/ip-bans', authenticate, requireRole('admin', 'superadmin'), (req, res) => {
+  const db = getDb();
+  const bans = db.prepare('SELECT * FROM ip_bans ORDER BY created_at DESC').all();
+  res.json(bans);
+});
+
+app.post('/api/admin/ip-bans', authenticate, requireRole('admin', 'superadmin'), (req, res) => {
+  const db = getDb();
+  const { ip, reason, hours } = req.body;
+  if (!ip) return res.status(400).json({ error: 'Укажите IP' });
+  
+  const id = generateId();
+  const until = hours ? now() + hours * 3600000 : 0;
+  db.prepare('INSERT INTO ip_bans (id, ip_cidr, reason, until, created_at) VALUES (?,?,?,?,?)')
+    .run(id, ip, reason || '', until, now());
+  
+  // Добавить в内存 ban list
+  ipBanList.add(ip);
+  
+  addAuditLog(req.user.id, 'ban_ip', 'ip', ip, reason || '', req.ip);
+  res.json({ success: true, id });
+});
+
+app.delete('/api/admin/ip-bans/:id', authenticate, requireRole('admin', 'superadmin'), (req, res) => {
+  const db = getDb();
+  const ban = db.prepare('SELECT * FROM ip_bans WHERE id = ?').get(req.params.id);
+  if (!ban) return res.status(404).json({ error: 'Бан не найден' });
+  
+  db.prepare('DELETE FROM ip_bans WHERE id = ?').run(req.params.id);
+  ipBanList.delete(ban.ip_cidr);
+  
+  addAuditLog(req.user.id, 'unban_ip', 'ip', ban.ip_cidr, '', req.ip);
+  res.json({ success: true });
+});
+
+// ═══ АКТИВНЫЕ СЕССИИ ═══
+app.get('/api/admin/sessions', authenticate, requireRole('admin', 'superadmin'), (req, res) => {
+  const db = getDb();
+  const sessions = db.prepare(`
+    SELECT s.*, u.username, u.email 
+    FROM active_sessions s 
+    JOIN users u ON s.user_id = u.id 
+    ORDER BY s.last_active DESC 
+    LIMIT 100
+  `).all();
+  res.json(sessions);
+});
+
+app.delete('/api/admin/sessions/:id', authenticate, requireRole('admin', 'superadmin'), (req, res) => {
+  const db = getDb();
+  db.prepare('DELETE FROM active_sessions WHERE id = ?').run(req.params.id);
+  addAuditLog(req.user.id, 'revoke_session', 'session', req.params.id, '', req.ip);
+  res.json({ success: true });
+});
+
+// ═══ ВИДЕОЗВОНКИ ПОЛЬЗОВАТЕЛЯМ ═══
+app.post('/api/admin/call', authenticate, requireRole('admin', 'superadmin'), (req, res) => {
+  const db = getDb();
+  const { userId, videoUrl } = req.body;
+  if (!userId) return res.status(400).json({ error: 'Укажите пользователя' });
+  
+  const user = db.prepare('SELECT id, username, is_online FROM users WHERE id = ?').get(userId);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  
+  const callData = {
+    from: req.user.username,
+    videoUrl: videoUrl || null,
+    timestamp: now()
+  };
+  
+  // Если пользователь онлайн - отправить через WebSocket
+  if (user.is_online === 1) {
+    io.to(`user_${userId}`).emit('admin_call', callData);
+  } else {
+    // Если оффлайн - сохранить для доставки при входе
+    if (!pendingCalls.has(userId)) {
+      pendingCalls.set(userId, []);
+    }
+    pendingCalls.get(userId).push(callData);
+  }
+  
+  addAuditLog(req.user.id, 'call_user', 'user', userId, videoUrl ? `Видео: ${videoUrl}` : 'Аудиозвонок', req.ip);
+  res.json({ success: true, isOnline: user.is_online === 1 });
+});
+
+// ═══ ПОЛУЧИТЬ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ ═══
+app.get('/api/auth/me', authenticate, (req, res) => {
+  const db = getDb();
+  const user = db.prepare('SELECT id, username, email, role, avatar, cover, bio, status, is_online, last_seen, created_at FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  
+  const followers = db.prepare('SELECT COUNT(*) as count FROM subscriptions WHERE following_id = ?').get(req.user.id)?.count || 0;
+  const following = db.prepare('SELECT COUNT(*) as count FROM subscriptions WHERE follower_id = ?').get(req.user.id)?.count || 0;
+  const postsCount = db.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ?').get(req.user.id)?.count || 0;
+  
+  res.json({ ...user, followers, following, postsCount });
+});
+
+// ═══ ВХОДЯЩИЕ ЗВОНКИ ═══
+const pendingCalls = new Map();
+
+app.get('/api/notifications/calls', authenticate, (req, res) => {
+  const calls = pendingCalls.get(req.user.id) || [];
+  // Очистить после получения
+  pendingCalls.delete(req.user.id);
+  res.json(calls);
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -598,6 +768,12 @@ io.on('connection', (socket) => {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
       socket.userId = decoded.userId;
+      // Присоединиться к персональному каналу для получения видеозвонков
+      socket.join(`user_${decoded.userId}`);
+      
+      // Обновить статус онлайн
+      const db = getDb();
+      db.prepare('UPDATE users SET is_online = 1, last_seen = ? WHERE id = ?').run(now(), decoded.userId);
     } catch {}
   });
 
