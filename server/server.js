@@ -29,7 +29,12 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 // ═══ MIDDLEWARE ═══
 app.use(compression());
-app.use(cors({ origin: '*', credentials: true, methods: ['GET','POST','PUT','DELETE','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'] }));
+app.use(cors({ 
+  origin: true, // Разрешить любой origin
+  credentials: true, 
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'], 
+  allowedHeaders: ['Content-Type','Authorization'] 
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 

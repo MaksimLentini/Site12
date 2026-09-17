@@ -1,52 +1,52 @@
 @echo off
 chcp 65001 >nul
 title MegaChat Server
+
 echo.
-echo ╔══════════════════════════════════════════╗
-echo ║   MegaChat — Запуск сервера...           ║
-echo ╚══════════════════════════════════════════╝
+echo ==========================================
+echo    MegaChat - Starting server...
+echo ==========================================
 echo.
 
-REM Проверка Node.js
+REM Check Node.js
 where node >nul 2>nul
 if %ERRORLEVEL% neq 0 (
-    echo [ОШИБКА] Node.js не установлен!
-    echo Скачайте с https://nodejs.org
+    echo [ERROR] Node.js not installed!
+    echo Download from https://nodejs.org
     pause
     exit /b 1
 )
 
-REM Переход в папку сервера
+REM Go to project root
+cd /d "%~dp0"
+
+REM Check if dist exists, if not build
+if not exist "dist\" (
+    echo [INFO] Building frontend...
+    call npm run build
+    echo.
+)
+
+REM Go to server folder
 cd /d "%~dp0server"
 
-REM Проверка node_modules
-if not exist "node_modules" (
-    echo [INFO] Установка зависимостей сервера...
+REM Check node_modules
+if not exist "node_modules\" (
+    echo [INFO] Installing server dependencies...
     call npm install
     echo.
 )
 
-REM Проверка dist
-if not exist "..\dist" (
-    echo [INFO] Сборка фронтенда...
-    cd /d "%~dp0"
-    call npm run build
-    cd /d "%~dp0server"
-    echo.
-)
-
-echo [INFO] Запуск сервера...
+echo [INFO] Starting server...
 echo.
-echo ╔══════════════════════════════════════════╗
-echo ║   MegaChat Server                        ║
-echo ║   http://localhost:3001                  ║
-echo ║   Откройте в браузере!                   ║
-echo ╚══════════════════════════════════════════╝
-echo.
-echo Нажмите любую клавишу для остановки...
+echo ==========================================
+echo    MegaChat Server
+echo    http://localhost:3001
+echo    Open in browser!
+echo ==========================================
 echo.
 
 start http://localhost:3001
-call npm start
+node server.js
 
 pause
