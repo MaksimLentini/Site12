@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, getDb } from './db.js';
+import { existsSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -27,14 +28,15 @@ const server = createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 // ═══ MIDDLEWARE ═══
-app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({ origin: '*', credentials: true, methods: ['GET','POST','PUT','DELETE','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'] }));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
-// Статика (dist фронтенда)
-app.use(express.static(join(__dirname, '..', 'dist')));
+// Статика (dist фронтенда) — ищем в корне проекта
+const distPath = join(__dirname, '..', 'dist');
+console.log(`[STATIC] Раздаю статику из: ${distPath}`);
+app.use(express.static(distPath));
 
 // ═══ УТИЛИТЫ ═══
 function generateId() { return uuidv4(); }
@@ -575,7 +577,12 @@ io.on('connection', (socket) => {
 // ═══════════════════════════════════════════════════════════
 
 app.get('*', (req, res) => {
-  res.sendFile(join(__dirname, '..', 'dist', 'index.html'));
+  const indexPath = join(__dirname, '..', 'dist', 'index.html');
+  if (existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send('<h1>MegaChat Server работает!</h1><p>Но фронтенд не собран.</p><p>Выполните в корне проекта: <code>npm run build</code></p><p>Затем перезапустите сервер.</p>');
+  }
 });
 
 // ═══════════════════════════════════════════════════════════
