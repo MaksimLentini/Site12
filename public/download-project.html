@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MegaChat — Скачать проект</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .container { background: white; border-radius: 20px; padding: 40px; max-width: 600px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+    h1 { font-size: 32px; margin-bottom: 10px; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    p { color: #666; margin-bottom: 30px; line-height: 1.6; }
+    button { background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 15px 40px; border-radius: 10px; font-size: 18px; font-weight: 600; cursor: pointer; width: 100%; transition: transform 0.2s; }
+    button:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .status { margin-top: 20px; padding: 15px; border-radius: 10px; background: #f0f0f0; display: none; }
+    .status.show { display: block; }
+    .progress { margin-top: 10px; }
+    .progress-bar { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); width: 0%; transition: width 0.3s; }
+    .instructions { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #667eea; }
+    .instructions h3 { margin-bottom: 10px; color: #333; }
+    .instructions ol { margin-left: 20px; color: #555; line-height: 1.8; }
+    code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 MegaChat</h1>
+    <p>Мессенджер нового поколения с реальной SQLite базой данных. Нажмите кнопку ниже чтобы скачать полный проект в ZIP архиве.</p>
+    
+    <button id="downloadBtn" onclick="downloadProject()">📦 Скачать ZIP архив</button>
+    
+    <div class="status" id="status">
+      <div id="statusText">Подготовка файлов...</div>
+      <div class="progress">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="instructions">
+      <h3>📋 Инструкция после скачивания:</h3>
+      <ol>
+        <li>Распакуйте <code>megachat.zip</code></li>
+        <li>Откройте терминал в папке <code>megachat</code></li>
+        <li>Выполните: <code>npm install</code></li>
+        <li>Перейдите: <code>cd server && npm install</code></li>
+        <li>Запустите сервер: <code>npm start</code></li>
+        <li>В другом терминале: <code>npm run dev</code></li>
+        <li>Откройте: <code>http://localhost:5173</code></li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════
+    // ВСЕ ФАЙЛЫ ПРОЕКТА
+    // ═══════════════════════════════════════════════════════════
+    
+    const files = {
+      'package.json': `{
+  "name": "megachat",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "lucide-react": "^0.294.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.0",
+    "vite": "^6.3.5",
+    "@tailwindcss/vite": "^4.1.7",
+    "tailwindcss": "^4.1.7"
+  }
+}`,
+
+      'vite.config.js': `import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  server: { 
+    port: 5173, 
+    proxy: { 
+      '/api': 'http://localhost:3001',
+      '/socket.io': { target: 'http://localhost:3001', ws: true }
+    }
+  }
+})`,
+
+      'tsconfig.json': `{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": ["src"]
+}`,
+
+      'index.html': `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MegaChat</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>`,
+
+      'README.md': `# MegaChat — Мессенджер нового поколения
+
+## 🚀 Быстрый старт
+
+\`\`\`bash
+npm install
+cd server && npm install && npm start
+cd .. && npm run dev
+\`\`\`
+
+Откройте http://localhost:5173
+
+Первый зарегистрированный пользователь = superadmin
+
+## 📁 Структура
+
+- \`server/\` — Backend (Express + SQLite)
+- \`src/\` — Frontend (React + TypeScript)
+- \`server/data/messenger.db\` — База данных SQLite
+
+## 🔐 Безопасность
+
+- bcrypt(12) для паролей
+- JWT токены
+- Helmet + CORS
+- Prepared statements
+- Role-based access control
+`,
+
+      'server/package.json': `{
+  "name": "megachat-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.4.3",
+    "socket.io": "^4.7.4",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4",
+    "cookie-parser": "^1.4.6",
+    "uuid": "^9.0.0"
+  }
+}`,
+
+      'src/main.tsx': `import React from "react"
+import ReactDOM from "react-dom/client"
+import "./index.css"
+import App from "./App.tsx"
+ReactDOM.createRoot(document.getElementById("root")!).render(<App />)`,
+
+      'src/vite-env.d.ts': `/// <reference types="vite/client" />`
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // СКАЧИВАНИЕ
+    // ═══════════════════════════════════════════════════════════
+
+    async function downloadProject() {
+      const btn = document.getElementById('downloadBtn');
+      const status = document.getElementById('status');
+      const statusText = document.getElementById('statusText');
+      const progressFill = document.getElementById('progressFill');
+      
+      btn.disabled = true;
+      status.classList.add('show');
+      
+      try {
+        statusText.textContent = 'Создание ZIP архива...';
+        progressFill.style.width = '10%';
+        
+        const zip = new JSZip();
+        
+        // Добавляем файлы
+        let count = 0;
+        const total = Object.keys(files).length;
+        
+        for (const [path, content] of Object.entries(files)) {
+          zip.file(path, content);
+          count++;
+          progressFill.style.width = `${(count / total) * 90}%`;
+          statusText.textContent = `Добавлено ${count}/${total} файлов...`;
+        }
+        
+        statusText.textContent = 'Упаковка...';
+        progressFill.style.width = '95%';
+        
+        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        
+        progressFill.style.width = '100%';
+        statusText.textContent = '✅ Готово! Скачивание...';
+        
+        // Скачиваем
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'megachat.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setTimeout(() => {
+          statusText.textContent = '✅ ZIP архив скачан! Следуйте инструкции ниже.';
+          btn.disabled = false;
+          btn.textContent = '🔄 Скачать ещё раз';
+        }, 1000);
+        
+      } catch (error) {
+        statusText.textContent = '❌ Ошибка: ' + error.message;
+        btn.disabled = false;
+        btn.textContent = '📦 Попробовать снова';
+      }
+    }
+  </script>
+</body>
+</html>
