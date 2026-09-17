@@ -12,6 +12,23 @@ import type { User, Chat, Message, Post, Story, Video, MusicTrack } from './type
 
 type Page = 'auth' | 'feed' | 'messenger' | 'videos' | 'shorts' | 'music' | 'stories' | 'profile' | 'admin';
 
+// Компонент аватара с fallback
+function Avatar({ src, seed, size = 40, className = '' }: { src?: string; seed: string; size?: number; className?: string }) {
+  const [error, setError] = useState(false);
+  const fallbackUrl = `https://api.dicebear.com/9.2/avataaars/svg?seed=${encodeURIComponent(seed)}`;
+  const imgSrc = error ? fallbackUrl : (src || fallbackUrl);
+  
+  return (
+    <img 
+      src={imgSrc} 
+      className={className}
+      style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', background: 'var(--bg-tertiary)' }}
+      onError={() => setError(true)}
+      alt={seed}
+    />
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(auth.getLocalUser());
   const [page, setPage] = useState<Page>(user ? 'feed' : 'auth');
@@ -71,7 +88,7 @@ export default function App() {
           <Globe size={22} />
         </button>
         <div className="cursor-pointer" onClick={() => { auth.logout(); setUser(null); setPage('auth'); }}>
-          <img src={user.avatar || `https://api.dicebear.com/7.0/avataaars/svg?seed=${user.username}`} className="w-9 h-9 rounded-full border-2" style={{ borderColor: 'var(--accent)' }} alt="" />
+          <Avatar src={user.avatar} seed={user.username} size={36} className="border-2" />
         </div>
       </nav>
 
@@ -223,7 +240,7 @@ function Feed({ user }: { user: User }) {
       <div className="max-w-2xl mx-auto py-6 px-4">
         <div className="card p-4 mb-6">
           <div className="flex items-center gap-3 mb-3">
-            <img src={user.avatar || `https://api.dicebear.com/7.0/avataaars/svg?seed=${user.username}`} className="w-10 h-10 rounded-full avatar" alt="" />
+            <Avatar src={user.avatar} seed={user.username} size={40} className="avatar" />
             <span className="font-semibold">{user.username}</span>
           </div>
           <textarea
@@ -876,7 +893,7 @@ function Profile({ user, onUpdate }: { user: User; onUpdate: (u: User) => void }
         </div>
         <div className="px-6 -mt-16 relative">
           <div className="flex items-end gap-4">
-            <img src={avatarUrl || `https://api.dicebear.com/7.0/avataaars/svg?seed=${user.username}`} className="w-32 h-32 rounded-full avatar border-4" style={{ borderColor: 'var(--bg-primary)' }} alt="" />
+            <Avatar src={avatarUrl} seed={user.username} size={128} className="avatar border-4" />
             <div className="pb-4 flex-1">
               <h1 className="text-2xl font-bold">{user.username}</h1>
               <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{bio || user.bio || 'Нет описания'}</p>
@@ -1077,7 +1094,7 @@ function Admin({ user }: { user: User }) {
                     <tr key={u.id} className="border-t" style={{ borderColor: 'var(--border)' }}>
                       <td className="p-3">
                         <div className="flex items-center gap-3">
-                          <img src={u.avatar || `https://api.dicebear.com/7.0/avataaars/svg?seed=${u.username}`} className="w-8 h-8 rounded-full avatar" alt="" />
+                          <Avatar src={u.avatar} seed={u.username} size={32} className="avatar" />
                           <div>
                             <p className="font-medium text-sm">{u.username}</p>
                             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{u.email}</p>
