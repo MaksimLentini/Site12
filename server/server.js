@@ -16,7 +16,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, getDb } from './db.js';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -103,6 +104,63 @@ app.use(express.static(distPath));
 function generateId() { return uuidv4(); }
 function now() { return Date.now(); }
 
+// ═══ РАБОТА С ACCOUNTS.JSON ═══
+const ACCOUNTS_FILE = join(__dirname, 'data', 'accounts.json');
+
+function loadAccounts() {
+  try {
+    if (existsSync(ACCOUNTS_FILE)) {
+      const data = JSON.parse(readFileSync(ACCOUNTS_FILE, 'utf8'));
+      return data.accounts || [];
+    }
+  } catch (e) {
+    console.error('[ACCOUNTS] Ошибка загрузки:', e.message);
+  }
+  return [];
+}
+
+function saveAccounts(accounts) {
+  try {
+    writeFileSync(ACCOUNTS_FILE, JSON.stringify({
+      accounts,
+      lastUpdated: new Date().toISOString()
+    }, null, 2));
+    console.log('[ACCOUNTS] ✅ Сохранено аккаунтов:', accounts.length);
+  } catch (e) {
+    console.error('[ACCOUNTS] Ошибка сохранения:', e.message);
+  }
+}
+
+function syncAccountToUser(account) {
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(account.id);
+  
+  if (existing) {
+    // Обновить существующего
+    db.prepare(`
+      UPDATE users SET 
+        username = ?, email = ?, password_hash = ?, role = ?, 
+        avatar = ?, cover = ?, bio = ?, status = ?, 
+        is_banned = ?, ban_reason = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      account.username, account.email, account.password_hash, account.role,
+      account.avatar || '', account.cover || '', account.bio || '', account.status || '',
+      account.is_banned ? 1 : 0, account.ban_reason || '', now(), account.id
+    );
+  } else {
+    // Создать нового
+    db.prepare(`
+      INSERT INTO users (id, username, email, password_hash, role, avatar, cover, bio, status, is_banned, ban_reason, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      account.id, account.username, account.email, account.password_hash, account.role,
+      account.avatar || '', account.cover || '', account.bio || '', account.status || '',
+      account.is_banned ? 1 : 0, account.ban_reason || '', now(), now()
+    );
+  }
+}
+
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.cookies?.token;
@@ -180,6 +238,24 @@ app.post('/api/auth/register', (req, res) => {
   
   db.prepare('INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) VALUES (?,?,?,?,?,?,?)')
     .run(id, username, email, passwordHash, role, now(), now());
+
+  // Сохранить в accounts.json
+  const accounts = loadAccounts();
+  accounts.push({
+    id,
+    username,
+    email,
+    password_hash: passwordHash,
+    role,
+    avatar: '',
+    cover: '',
+    bio: '',
+    status: '',
+    is_banned: false,
+    ban_reason: '',
+    created_at: now()
+  });
+  saveAccounts(accounts);
 
   const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
   const user = db.prepare('SELECT id, username, email, role, avatar, bio, status FROM users WHERE id = ?').get(id);
@@ -736,6 +812,136 @@ app.get('/api/notifications/calls', authenticate, (req, res) => {
   // Очистить после получения
   pendingCalls.delete(req.user.id);
   res.json(calls);
+});
+
+// ═══ УПРАВЛЕНИЕ АККАУНТАМИ ЧЕРЕЗ ФАЙЛ ═══
+
+// Получить все аккаунты из файла
+app.get('/api/admin/accounts', authenticate, requireRole('admin', 'superadmin'), (req, res) => {
+  const accounts = loadAccounts();
+  // Убрать password_hash из ответа
+  const safeAccounts = accounts.map(acc => ({
+    id: acc.id,
+    username: acc.username,
+    email: acc.email,
+    role: acc.role,
+    avatar: acc.avatar || '',
+    cover: acc.cover || '',
+    bio: acc.bio || '',
+    status: acc.status || '',
+    is_banned: acc.is_banned || false,
+    ban_reason: acc.ban_reason || '',
+    created_at: acc.created_at
+  }));
+  res.json(safeAccounts);
+});
+
+// Редактировать аккаунт
+app.put('/api/admin/accounts/:id', authenticate, requireRole('admin', 'superadmin'), (req, res) => {
+  const accountId = req.params.id;
+  const updates = req.body;
+  
+  const accounts = loadAccounts();
+  const accountIndex = accounts.findIndex(acc => acc.id === accountId);
+  
+  if (accountIndex === -1) {
+    return res.status(404).json({ error: 'Аккаунт не найден в файле' });
+  }
+  
+  // Обновить поля
+  const account = accounts[accountIndex];
+  if (updates.username !== undefined) account.username = updates.username;
+  if (updates.email !== undefined) account.email = updates.email;
+  if (updates.password !== undefined && updates.password.length >= 6) {
+    account.password_hash = bcrypt.hashSync(updates.password, 12);
+  }
+  if (updates.role !== undefined) account.role = updates.role;
+  if (updates.avatar !== undefined) account.avatar = updates.avatar;
+  if (updates.cover !== undefined) account.cover = updates.cover;
+  if (updates.bio !== undefined) account.bio = updates.bio;
+  if (updates.status !== undefined) account.status = updates.status;
+  if (updates.is_banned !== undefined) account.is_banned = updates.is_banned;
+  if (updates.ban_reason !== undefined) account.ban_reason = updates.ban_reason;
+  
+  accounts[accountIndex] = account;
+  saveAccounts(accounts);
+  
+  // Синхронизировать с БД
+  syncAccountToUser(account);
+  
+  addAuditLog(req.user.id, 'edit_account', 'user', accountId, JSON.stringify(updates), req.ip);
+  res.json({ success: true, account });
+});
+
+// Удалить аккаунт
+app.delete('/api/admin/accounts/:id', authenticate, requireRole('superadmin'), (req, res) => {
+  const accountId = req.params.id;
+  
+  if (accountId === req.user.id) {
+    return res.status(400).json({ error: 'Нельзя удалить свой аккаунт' });
+  }
+  
+  // Удалить из файла
+  let accounts = loadAccounts();
+  accounts = accounts.filter(acc => acc.id !== accountId);
+  saveAccounts(accounts);
+  
+  // Удалить из БД
+  const db = getDb();
+  db.prepare('DELETE FROM users WHERE id = ?').run(accountId);
+  
+  addAuditLog(req.user.id, 'delete_account', 'user', accountId, '', req.ip);
+  res.json({ success: true });
+});
+
+// Создать новый аккаунт через админку
+app.post('/api/admin/accounts', authenticate, requireRole('superadmin'), (req, res) => {
+  const { username, email, password, role } = req.body;
+  
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: 'Заполните все обязательные поля' });
+  }
+  
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Пароль минимум 6 символов' });
+  }
+  
+  const accounts = loadAccounts();
+  
+  // Проверить уникальность
+  if (accounts.find(acc => acc.username === username)) {
+    return res.status(409).json({ error: 'Имя пользователя уже занято' });
+  }
+  if (accounts.find(acc => acc.email === email)) {
+    return res.status(409).json({ error: 'Email уже занят' });
+  }
+  
+  const id = generateId();
+  const passwordHash = bcrypt.hashSync(password, 12);
+  
+  const newAccount = {
+    id,
+    username,
+    email,
+    password_hash: passwordHash,
+    role: role || 'user',
+    avatar: '',
+    cover: '',
+    bio: '',
+    status: '',
+    is_banned: false,
+    ban_reason: '',
+    created_at: now()
+  };
+  
+  accounts.push(newAccount);
+  saveAccounts(accounts);
+  
+  // Синхронизировать с БД
+  syncAccountToUser(newAccount);
+  
+  addAuditLog(req.user.id, 'create_account', 'user', id, `Создан: ${username}`, req.ip);
+  res.json({ success: true, account: { ...newAccount, password_hash: undefined } });
 });
 
 // ═══════════════════════════════════════════════════════════
