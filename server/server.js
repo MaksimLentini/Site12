@@ -30,7 +30,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 // ═══ MIDDLEWARE ═══
 app.use(compression());
 app.use(cors({ 
-  origin: ['http://localhost:5173', 'http://localhost:3001', '*'], 
+  origin: true, // Разрешить любой origin
   credentials: true, 
   methods: ['GET','POST','PUT','DELETE','OPTIONS'], 
   allowedHeaders: ['Content-Type','Authorization'] 
