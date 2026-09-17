@@ -50,15 +50,35 @@ function now() { return Date.now(); }
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.cookies?.token;
-  if (!token) return res.status(401).json({ error: 'Требуется авторизация' });
+  
+  console.log('[AUTH] Проверка токена для:', req.path, 'Token:', token ? token.substring(0, 20) + '...' : 'отсутствует');
+  
+  if (!token) {
+    console.log('[AUTH] ❌ Токен отсутствует');
+    return res.status(401).json({ error: 'Требуется авторизация' });
+  }
+  
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    console.log('[AUTH] Токен декодирован:', decoded);
+    
     const db = getDb();
     req.user = db.prepare('SELECT id, username, email, role, avatar, bio, is_banned FROM users WHERE id = ?').get(decoded.userId);
-    if (!req.user) return res.status(401).json({ error: 'Пользователь не найден' });
-    if (req.user.is_banned) return res.status(403).json({ error: 'Аккаунт заблокирован' });
+    
+    if (!req.user) {
+      console.log('[AUTH] ❌ Пользователь не найден в БД');
+      return res.status(401).json({ error: 'Пользователь не найден' });
+    }
+    
+    if (req.user.is_banned) {
+      console.log('[AUTH] ❌ Аккаунт заблокирован');
+      return res.status(403).json({ error: 'Аккаунт заблокирован' });
+    }
+    
+    console.log('[AUTH] ✅ Авторизация успешна:', req.user.username);
     next();
-  } catch {
+  } catch (err) {
+    console.log('[AUTH] ❌ Ошибка верификации токена:', err.message);
     return res.status(401).json({ error: 'Недействительный токен' });
   }
 }
@@ -108,15 +128,29 @@ app.post('/api/auth/register', (req, res) => {
 });
 
 app.post('/api/auth/login', (req, res) => {
+  console.log('[AUTH] Попытка входа:', req.body.username);
   const db = getDb();
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Заполните все поля' });
+  
+  if (!username || !password) {
+    console.log('[AUTH] Ошибка: пустые поля');
+    return res.status(400).json({ error: 'Заполните все поля' });
+  }
 
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  if (!user) return res.status(401).json({ error: 'Неверное имя пользователя или пароль' });
-  if (user.is_banned) return res.status(403).json({ error: `Аккаунт заблокирован: ${user.ban_reason}` });
+  if (!user) {
+    console.log('[AUTH] Ошибка: пользователь не найден');
+    return res.status(401).json({ error: 'Неверное имя пользователя или пароль' });
+  }
   
-  if (!bcrypt.compareSync(password, user.password_hash)) {
+  if (user.is_banned) {
+    console.log('[AUTH] Ошибка: аккаунт заблокирован');
+    return res.status(403).json({ error: `Аккаунт заблокирован: ${user.ban_reason}` });
+  }
+  
+  const passwordMatch = bcrypt.compareSync(password, user.password_hash);
+  if (!passwordMatch) {
+    console.log('[AUTH] Ошибка: неверный пароль');
     return res.status(401).json({ error: 'Неверное имя пользователя или пароль' });
   }
 
@@ -125,7 +159,7 @@ app.post('/api/auth/login', (req, res) => {
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
   const safeUser = { id: user.id, username: user.username, email: user.email, role: user.role, avatar: user.avatar, bio: user.bio, status: user.status };
   
-  console.log(`[AUTH] Вход: ${username}`);
+  console.log(`[AUTH] ✅ Вход успешен: ${username}, токен: ${token.substring(0, 20)}...`);
   res.json({ token, user: safeUser });
 });
 
