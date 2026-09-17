@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { auth, users as usersApi, chats as chatsApi, posts as postsApi, stories as storiesApi, videos as videosApi, music as musicApi, admin as adminApi } from './store';
 import type { User, Chat, Message, Post, Story, Video, MusicTrack } from './types';
+import { connectSocket, disconnectSocket, useSocketEvent } from './socket';
 
 type Page = 'auth' | 'feed' | 'messenger' | 'videos' | 'shorts' | 'music' | 'stories' | 'profile' | 'admin' | 'user-profile';
 
@@ -50,6 +51,11 @@ export default function App() {
         .then(u => {
           setUser(u);
           setPage('feed');
+          // Подключаемся к Socket.IO для real-time обновлений
+          const token = localStorage.getItem('megachat_token');
+          if (token) {
+            connectSocket(token);
+          }
         })
         .catch(() => {
           // Токен невалиден
@@ -61,6 +67,13 @@ export default function App() {
       setLoading(false);
     }
   }, []);
+
+  // Отключение Socket.IO при выходе
+  useEffect(() => {
+    if (!user) {
+      disconnectSocket();
+    }
+  }, [user]);
 
   // Обработчик входящих видеозвонков от админа
   useEffect(() => {
@@ -310,6 +323,15 @@ function Feed({ user, onViewProfile }: { user: User; onViewProfile?: (userId: st
 
   useEffect(() => { loadPosts(); }, []);
 
+  // Real-time обновления
+  useSocketEvent('post:created', (newPost: Post) => {
+    setPosts(prev => [newPost, ...prev]);
+  });
+
+  useSocketEvent('post:liked', ({ postId, likes }: { postId: string; likes: number }) => {
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes_count: likes } : p));
+  });
+
   const createPost = async () => {
     if (!content.trim()) return;
     setLoading(true);
@@ -509,6 +531,27 @@ function Messenger({ user }: { user: User }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Real-time обновления для чатов
+  useSocketEvent('chat:created', (newChat: Chat) => {
+    setChatList(prev => [newChat, ...prev]);
+  });
+
+  // Real-time обновления для сообщений
+  useSocketEvent('new_message', (newMsg: Message) => {
+    if (selectedChat && newMsg.chat_id === selectedChat.id) {
+      setMessages(prev => [...prev, newMsg]);
+    }
+    // Обновить список чатов
+    loadChats();
+  });
+
+  // Real-time обновления для реакций
+  useSocketEvent('message:reaction', ({ messageId }: { messageId: string }) => {
+    if (selectedChat) {
+      loadMessages(selectedChat.id);
+    }
+  });
 
   const createChat = async () => {
     if (!chatTitle.trim()) return;
@@ -751,6 +794,11 @@ function Videos({ user, onFullscreen }: { user: User; onFullscreen?: (url: strin
 
   useEffect(() => { loadVideos(); }, []);
 
+  // Real-time обновления для видео
+  useSocketEvent('video:created', (newVideo: Video) => {
+    setVideoList(prev => [newVideo, ...prev]);
+  });
+
   const uploadVideo = async () => {
     if (!title.trim()) return;
     try {
@@ -907,6 +955,11 @@ function MusicPage({ user }: { user: User }) {
   };
 
   useEffect(() => { loadTracks(); }, []);
+
+  // Real-time обновления для музыки
+  useSocketEvent('music:created', (newTrack: MusicTrack) => {
+    setTracks(prev => [newTrack, ...prev]);
+  });
 
   const uploadTrack = async () => {
     if (!title.trim()) return;
@@ -1130,6 +1183,11 @@ function Stories({ user }: { user: User }) {
   };
 
   useEffect(() => { loadStories(); }, []);
+
+  // Real-time обновления для сторис
+  useSocketEvent('story:created', (newStory: Story) => {
+    setStoryList(prev => [newStory, ...prev]);
+  });
 
   const createStory = async () => {
     if (!media.trim()) return;
