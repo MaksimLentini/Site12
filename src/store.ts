@@ -1,10 +1,7 @@
-// ═══════════════════════════════════════════════════════════
-// API КЛИЕНТ — подключение к реальному серверу
-// ═══════════════════════════════════════════════════════════
+// ═══ API КЛИЕНТ ═══
 import { User, Chat, Message, Post, Story, Video, MusicTrack, Notification } from './types';
 
 const API_URL = '/api';
-
 let authToken: string | null = localStorage.getItem('megachat_token');
 
 function setToken(token: string | null) {
@@ -60,10 +57,6 @@ export const auth = {
     setToken(null);
     localStorage.removeItem('megachat_user');
   },
-  async me(): Promise<User> {
-    return api<User>('/auth/me');
-  },
-  getToken() { return authToken; },
   getLocalUser(): User | null {
     try { return JSON.parse(localStorage.getItem('megachat_user') || 'null'); } catch { return null; }
   }
@@ -71,21 +64,11 @@ export const auth = {
 
 // ═══ USERS ═══
 export const users = {
-  async list(search?: string): Promise<User[]> {
-    const data = await api<{ users: User[] }>(`/users${search ? `?search=${encodeURIComponent(search)}` : ''}`);
-    return data.users;
-  },
   async get(id: string): Promise<User & { followers: number; following: number; postsCount: number }> {
     return api(`/users/${id}`);
   },
   async update(data: Partial<User>): Promise<void> {
     await api('/users/me', { method: 'PUT', body: JSON.stringify(data) });
-  },
-  async follow(id: string): Promise<void> {
-    await api(`/users/${id}/follow`, { method: 'POST' });
-  },
-  async unfollow(id: string): Promise<void> {
-    await api(`/users/${id}/follow`, { method: 'DELETE' });
   }
 };
 
@@ -97,12 +80,12 @@ export const chats = {
   async create(data: { type: string; title?: string; members?: string[] }): Promise<Chat> {
     return api<Chat>('/chats', { method: 'POST', body: JSON.stringify(data) });
   },
-  async messages(chatId: string, limit = 100): Promise<Message[]> {
-    return api<Message[]>(`/chats/${chatId}/messages?limit=${limit}`);
+  async messages(chatId: string): Promise<Message[]> {
+    return api<Message[]>(`/chats/${chatId}/messages`);
   },
-  async sendMessage(chatId: string, content: string, type = 'text', replyTo?: string): Promise<Message> {
+  async sendMessage(chatId: string, content: string): Promise<Message> {
     return api<Message>(`/chats/${chatId}/messages`, {
-      method: 'POST', body: JSON.stringify({ content, type, reply_to: replyTo })
+      method: 'POST', body: JSON.stringify({ content })
     });
   },
   async react(messageId: string, emoji: string): Promise<void> {
@@ -112,17 +95,14 @@ export const chats = {
 
 // ═══ POSTS ═══
 export const posts = {
-  async list(limit = 50): Promise<Post[]> {
-    return api<Post[]>(`/posts?limit=${limit}`);
+  async list(): Promise<Post[]> {
+    return api<Post[]>('/posts');
   },
   async create(data: { content: string; type?: string; media?: string[]; hashtags?: string[] }): Promise<Post> {
     return api<Post>('/posts', { method: 'POST', body: JSON.stringify(data) });
   },
   async like(postId: string): Promise<{ likes: number }> {
     return api<{ likes: number }>(`/posts/${postId}/like`, { method: 'POST' });
-  },
-  async delete(postId: string): Promise<void> {
-    await api(`/posts/${postId}`, { method: 'DELETE' });
   }
 };
 
@@ -142,11 +122,8 @@ export const videos = {
     const q = short !== undefined ? `?short=${short}` : '';
     return api<Video[]>(`/videos${q}`);
   },
-  async create(data: { title: string; description?: string; thumbnail?: string; duration?: number; tags?: string[]; is_short?: boolean }): Promise<Video> {
+  async create(data: { title: string; description?: string; thumbnail?: string; duration?: number; tags?: string[] }): Promise<Video> {
     return api<Video>('/videos', { method: 'POST', body: JSON.stringify(data) });
-  },
-  async view(videoId: string): Promise<void> {
-    await api(`/videos/${videoId}/view`, { method: 'POST' });
   }
 };
 
@@ -160,32 +137,19 @@ export const music = {
   }
 };
 
-// ═══ NOTIFICATIONS ═══
-export const notifications = {
-  async list(): Promise<Notification[]> {
-    return api<Notification[]>('/notifications');
-  },
-  async markRead(): Promise<void> {
-    await api('/notifications/read', { method: 'PUT' });
-  }
-};
-
 // ═══ ADMIN ═══
 export const admin = {
   async stats(): Promise<Record<string, number>> {
     return api('/admin/stats');
   },
-  async getUsers(search?: string): Promise<User[]> {
-    return api<User[]>(`/admin/users${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+  async getUsers(): Promise<User[]> {
+    return api<User[]>('/admin/users');
   },
   async banUser(id: string, reason?: string): Promise<void> {
     await api(`/admin/users/${id}/ban`, { method: 'PUT', body: JSON.stringify({ reason }) });
   },
   async unbanUser(id: string): Promise<void> {
     await api(`/admin/users/${id}/unban`, { method: 'PUT' });
-  },
-  async changeRole(id: string, role: string): Promise<void> {
-    await api(`/admin/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
   },
   async deleteUser(id: string): Promise<void> {
     await api(`/admin/users/${id}`, { method: 'DELETE' });
