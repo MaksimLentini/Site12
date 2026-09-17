@@ -1,163 +1,113 @@
 // ═══════════════════════════════════════════════════════════
-// ТИПЫ ДАННЫХ — МЕССЕНДЖЕР
+// ТИПЫ ДАННЫХ — совместимы с API (snake_case из SQLite)
 // ═══════════════════════════════════════════════════════════
 
 export type UserRole = 'user' | 'moderator' | 'admin' | 'superadmin';
-export type ChatType = 'private' | 'group' | 'channel';
-export type MessageType = 'text' | 'image' | 'video' | 'voice' | 'sticker' | 'file' | 'poll' | 'video_note';
-export type PostType = 'photo' | 'video' | 'text' | 'carousel' | 'reel';
-export type StoryStatus = 'active' | 'expired' | 'viewed';
 
 export interface User {
   id: string;
   username: string;
   email: string;
-  password: string;
+  password?: string;
   role: UserRole;
   avatar: string;
   cover: string;
   bio: string;
   status: string;
-  isOnline: boolean;
-  lastSeen: number;
-  isBanned: boolean;
-  banReason?: string;
-  createdAt: number;
-  followers: string[];
-  following: string[];
-  settings: UserSettings;
-}
-
-export interface UserSettings {
-  theme: 'dark' | 'light' | 'auto';
-  language: 'ru' | 'en';
-  notifications: boolean;
-  soundEnabled: boolean;
-  privacyProfile: 'public' | 'friends' | 'private';
-  privacyMessages: 'all' | 'friends';
+  is_online?: number;
+  is_banned?: number;
+  ban_reason?: string;
+  last_seen?: number;
+  created_at?: number;
+  followers?: number;
+  following?: number;
+  postsCount?: number;
+  settings_json?: string;
+  privacy_json?: string;
 }
 
 export interface Chat {
   id: string;
-  type: ChatType;
+  type: 'private' | 'group' | 'channel';
   title: string;
   avatar: string;
   members: string[];
-  createdBy: string;
-  createdAt: number;
+  created_by: string;
+  created_at: number;
   lastMessage?: Message;
-  isPinned: boolean;
-  isMuted: boolean;
-  isArchived: boolean;
-  isSecret: boolean;
-  unreadCount: number;
+  is_secret?: number;
 }
 
 export interface Message {
   id: string;
-  chatId: string;
-  userId: string;
+  chat_id: string;
+  user_id: string;
   content: string;
-  type: MessageType;
-  replyTo?: string;
-  forwardedFrom?: string;
-  reactions: Record<string, string[]>;
-  isEdited: boolean;
-  isDeleted: boolean;
-  createdAt: number;
-  readBy: string[];
-  meta?: Record<string, any>;
+  type: string;
+  reply_to?: string;
+  reactions?: Record<string, string[]>;
+  is_edited?: number;
+  is_deleted?: number;
+  created_at: number;
 }
 
 export interface Post {
   id: string;
-  userId: string;
+  user_id: string;
   content: string;
-  type: PostType;
-  media: string[];
-  likes: string[];
-  commentsCount: number;
-  shares: number;
-  isHidden: boolean;
-  location?: string;
-  hashtags: string[];
-  createdAt: number;
+  type: string;
+  media?: string[];
+  likes?: string[];
+  likes_count: number;
+  comments_count: number;
+  shares_count?: number;
+  is_hidden?: number;
+  hashtags?: string[];
+  created_at: number;
 }
 
 export interface Story {
   id: string;
-  userId: string;
+  user_id: string;
   media: string;
   text?: string;
-  viewedBy: string[];
-  expiresAt: number;
-  createdAt: number;
+  text_content?: string;
+  expires_at: number;
+  created_at: number;
 }
 
 export interface Video {
   id: string;
-  userId: string;
+  user_id: string;
   title: string;
   description: string;
   thumbnail: string;
   duration: number;
-  views: number;
-  likes: string[];
-  comments: VideoComment[];
-  tags: string[];
-  isShort: boolean;
-  createdAt: number;
-}
-
-export interface VideoComment {
-  id: string;
-  userId: string;
-  content: string;
-  likes: string[];
-  replyTo?: string;
-  createdAt: number;
+  views_count: number;
+  likes_count?: number;
+  tags?: string[];
+  is_short?: number;
+  created_at: number;
 }
 
 export interface MusicTrack {
   id: string;
-  userId: string;
+  user_id: string;
   title: string;
   artist: string;
   duration: number;
   cover: string;
-  plays: number;
-  createdAt: number;
+  plays_count?: number;
+  created_at: number;
 }
 
 export interface Notification {
   id: string;
-  userId: string;
-  type: 'message' | 'like' | 'comment' | 'follow' | 'mention' | 'system';
+  user_id: string;
+  type: string;
   title: string;
   body: string;
-  isRead: boolean;
-  createdAt: number;
+  is_read: number;
+  created_at: number;
   link?: string;
-}
-
-export interface Report {
-  id: string;
-  reporterId: string;
-  targetType: 'user' | 'post' | 'message' | 'comment' | 'video';
-  targetId: string;
-  reason: string;
-  status: 'pending' | 'reviewed' | 'resolved' | 'dismissed';
-  moderatorId?: string;
-  createdAt: number;
-}
-
-export interface AuditLog {
-  id: string;
-  adminId: string;
-  action: string;
-  targetType: string;
-  targetId: string;
-  details: string;
-  ip: string;
-  createdAt: number;
 }
