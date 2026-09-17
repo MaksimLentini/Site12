@@ -17,7 +17,6 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, getDb } from './db.js';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
